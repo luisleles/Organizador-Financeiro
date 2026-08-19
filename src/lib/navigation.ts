@@ -11,6 +11,8 @@ export type NavIconName =
 export type NavItem = {
   href: string;
   label: string;
+  /** Versão curta para a barra inferior, onde cabem ~9 caracteres por alvo. */
+  shortLabel: string;
   icon: NavIconName;
 };
 
@@ -23,24 +25,29 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Dia a dia",
     items: [
-      { href: "/", label: "Início", icon: "inicio" },
-      { href: "/transacoes", label: "Transações", icon: "transacoes" },
-      { href: "/contas", label: "Contas", icon: "contas" },
+      { href: "/", label: "Início", shortLabel: "Início", icon: "inicio" },
+      { href: "/transacoes", label: "Transações", shortLabel: "Extrato", icon: "transacoes" },
+      { href: "/contas", label: "Contas", shortLabel: "Contas", icon: "contas" },
     ],
   },
   {
     title: "Planejamento",
     items: [
-      { href: "/orcamentos", label: "Orçamentos", icon: "orcamentos" },
-      { href: "/metas", label: "Metas", icon: "metas" },
+      { href: "/orcamentos", label: "Orçamentos", shortLabel: "Orçamento", icon: "orcamentos" },
+      { href: "/metas", label: "Metas", shortLabel: "Metas", icon: "metas" },
     ],
   },
   {
     title: "Estrutura",
     items: [
-      { href: "/categorias", label: "Categorias", icon: "categorias" },
-      { href: "/relatorios", label: "Relatórios", icon: "relatorios" },
-      { href: "/configuracoes", label: "Configurações", icon: "configuracoes" },
+      { href: "/categorias", label: "Categorias", shortLabel: "Categorias", icon: "categorias" },
+      { href: "/relatorios", label: "Relatórios", shortLabel: "Relatórios", icon: "relatorios" },
+      {
+        href: "/configuracoes",
+        label: "Configurações",
+        shortLabel: "Ajustes",
+        icon: "configuracoes",
+      },
     ],
   },
 ];

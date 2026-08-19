@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PeriodPicker } from "./period-picker";
 
@@ -8,6 +9,9 @@ export function TopBar() {
       <Suspense fallback={<Skeleton className="h-8 w-64" />}>
         <PeriodPicker />
       </Suspense>
+      <div className="ml-auto">
+        <ThemeToggle />
+      </div>
     </header>
   );
 }

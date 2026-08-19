@@ -24,24 +24,40 @@ export function EmptyState({ title, description, action, className }: EmptyState
   );
 }
 
-/** Um mês sem lançamento nenhum, desenhado com a linguagem do Batimento. */
+/** A silhueta de um mês sem nada lançado, no vocabulário do Batimento. */
+const GHOST_INCOME = [0, 5, 0, 0, 8, 0, 0, 4, 0, 0, 7, 0, 0, 3, 0, 0];
+const GHOST_EXPENSE = [4, 7, 3, 9, 5, 6, 10, 4, 8, 3, 7, 5, 9, 4, 6, 8];
+
 function EmptyMark() {
   return (
-    <svg aria-hidden viewBox="0 0 120 32" className="text-previsto h-8 w-30">
-      <line x1="0" y1="16" x2="120" y2="16" stroke="currentColor" strokeWidth="1" />
-      {Array.from({ length: 15 }, (_, index) => (
+    <svg aria-hidden viewBox="0 0 132 44" className="text-previsto h-11 w-33">
+      {GHOST_INCOME.map((height, index) =>
+        height === 0 ? null : (
+          <line
+            key={`entrada-${index}`}
+            x1={6 + index * 8}
+            x2={6 + index * 8}
+            y1={22}
+            y2={22 - height}
+            stroke="currentColor"
+            strokeWidth="4"
+            opacity="0.4"
+          />
+        ),
+      )}
+      {GHOST_EXPENSE.map((height, index) => (
         <line
-          key={index}
-          x1={4 + index * 8}
-          y1="10"
-          x2={4 + index * 8}
-          y2="22"
+          key={`saida-${index}`}
+          x1={6 + index * 8}
+          x2={6 + index * 8}
+          y1={22}
+          y2={22 + height}
           stroke="currentColor"
-          strokeWidth="3"
-          strokeDasharray="2 3"
-          opacity="0.5"
+          strokeWidth="4"
+          opacity="0.4"
         />
       ))}
+      <line x1="0" y1="22" x2="132" y2="22" stroke="currentColor" strokeWidth="1" />
     </svg>
   );
 }

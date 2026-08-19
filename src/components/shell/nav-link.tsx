@@ -22,12 +22,12 @@ export function NavLink({ item, query, variant }: NavLinkProps) {
         href={`${item.href}${query}`}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "text-2xs flex flex-1 flex-col items-center gap-1 rounded-md py-2 font-semibold uppercase transition",
+          "text-2xs flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md px-1 py-2 font-semibold transition",
           active ? "text-texto" : "text-texto-fraco",
         )}
       >
         <NavIcon name={item.icon} className="h-5 w-5" />
-        {item.label}
+        <span className="w-full truncate text-center">{item.shortLabel}</span>
       </Link>
     );
   }

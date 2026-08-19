@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/cn";
 import { NAV_ITEMS, PRIMARY_NAV_HREFS, isActive } from "@/lib/navigation";
 import { NavIcon } from "./nav-icon";
@@ -47,12 +46,12 @@ export function BarNav({ query }: BarNavProps) {
           aria-expanded={sheetOpen}
           onClick={() => setSheetOpen(true)}
           className={cn(
-            "text-2xs flex flex-1 flex-col items-center gap-1 rounded-md py-2 font-semibold uppercase transition",
+            "text-2xs flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md px-1 py-2 font-semibold transition",
             secondaryActive ? "text-texto" : "text-texto-fraco",
           )}
         >
           <NavIcon name="configuracoes" className="h-5 w-5" />
-          Mais
+          <span className="w-full truncate text-center">Mais</span>
         </button>
       </nav>
 
@@ -75,10 +74,6 @@ export function BarNav({ query }: BarNavProps) {
               {item.label}
             </Link>
           ))}
-          <div className="flex items-center justify-between px-4 pt-3">
-            <span className="text-texto-fraco text-sm">Tema</span>
-            <ThemeToggle />
-          </div>
         </div>
       </dialog>
     </>
