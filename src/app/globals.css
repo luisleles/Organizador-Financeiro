@@ -173,6 +173,17 @@
     border-radius: var(--radius-sm);
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   dialog::backdrop {
     background-color: color-mix(in oklab, light-dark(#0f1618, #000000) 55%, transparent);
     backdrop-filter: blur(2px);
