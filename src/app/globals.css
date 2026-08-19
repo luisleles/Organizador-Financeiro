@@ -1,1 +1,185 @@
 @import "tailwindcss";
+
+/*
+  Contrato de cor: cor é reservada para significado financeiro.
+  A interface é tinta e papel; `foco` é o único acento não-financeiro.
+  - entrada  → turquesa
+  - saida    → ocre (gasto dentro do previsto)
+  - alerta   → carmim (gasto fora do plano, saldo negativo, ação destrutiva)
+  - previsto → bruma (o que ainda não aconteceu)
+*/
+:root {
+  color-scheme: light dark;
+
+  --c-fundo: light-dark(#f2f5f6, #0e1518);
+  --c-superficie: light-dark(#fcfdfd, #151e22);
+  --c-superficie-alta: light-dark(#ffffff, #1c272c);
+  --c-linha: light-dark(#d5dbde, #26343a);
+  --c-linha-forte: light-dark(#b7c0c5, #3a4a51);
+  --c-texto: light-dark(#1b2427, #e4eaec);
+  --c-texto-fraco: light-dark(#6c7a81, #93a2a8);
+  --c-tinta: light-dark(#0f1618, #e4eaec);
+  --c-tinta-avesso: light-dark(#f2f5f6, #0e1518);
+
+  --c-entrada: light-dark(#0b6e75, #5bd9de);
+  --c-entrada-fill: light-dark(#12a0a8, #2ab8c0);
+  --c-entrada-suave: light-dark(#dcf0f0, #0f2e32);
+
+  --c-saida: light-dark(#a85b12, #efa950);
+  --c-saida-fill: light-dark(#d98324, #d98a2b);
+  --c-saida-suave: light-dark(#f7e7d3, #33230e);
+
+  --c-alerta: light-dark(#b0234a, #f2708f);
+  --c-alerta-fill: light-dark(#db3a63, #e0567a);
+  --c-alerta-suave: light-dark(#fadde3, #331520);
+
+  --c-previsto: light-dark(#7e8c93, #6e7f87);
+  --c-previsto-fill: light-dark(#afbbc0, #3a4a51);
+
+  --c-foco: light-dark(#2653d9, #6b93ff);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-inherit: inherit;
+
+  --color-fundo: var(--c-fundo);
+  --color-superficie: var(--c-superficie);
+  --color-superficie-alta: var(--c-superficie-alta);
+  --color-linha: var(--c-linha);
+  --color-linha-forte: var(--c-linha-forte);
+  --color-texto: var(--c-texto);
+  --color-texto-fraco: var(--c-texto-fraco);
+  --color-tinta: var(--c-tinta);
+  --color-tinta-avesso: var(--c-tinta-avesso);
+
+  --color-entrada: var(--c-entrada);
+  --color-entrada-fill: var(--c-entrada-fill);
+  --color-entrada-suave: var(--c-entrada-suave);
+
+  --color-saida: var(--c-saida);
+  --color-saida-fill: var(--c-saida-fill);
+  --color-saida-suave: var(--c-saida-suave);
+
+  --color-alerta: var(--c-alerta);
+  --color-alerta-fill: var(--c-alerta-fill);
+  --color-alerta-suave: var(--c-alerta-suave);
+
+  --color-previsto: var(--c-previsto);
+  --color-previsto-fill: var(--c-previsto-fill);
+
+  --color-foco: var(--c-foco);
+}
+
+@theme {
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-texto: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-numero: var(--font-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  --text-*: initial;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1.35;
+  --text-2xs--letter-spacing: 0.06em;
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.4;
+
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.45;
+
+  --text-md: 0.9375rem;
+  --text-md--line-height: 1.55;
+
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.35;
+  --text-lg--letter-spacing: -0.01em;
+
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.25;
+  --text-xl--letter-spacing: -0.015em;
+
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 1.15;
+  --text-2xl--letter-spacing: -0.02em;
+
+  --text-3xl: 2.5rem;
+  --text-3xl--line-height: 1.05;
+  --text-3xl--letter-spacing: -0.03em;
+
+  --text-num-xs: 0.75rem;
+  --text-num-xs--line-height: 1.3;
+  --text-num-xs--letter-spacing: -0.01em;
+
+  --text-num-sm: 0.8125rem;
+  --text-num-sm--line-height: 1.4;
+  --text-num-sm--letter-spacing: -0.01em;
+
+  --text-num-md: 1rem;
+  --text-num-md--line-height: 1.3;
+  --text-num-md--letter-spacing: -0.02em;
+
+  --text-num-lg: 1.5rem;
+  --text-num-lg--line-height: 1.15;
+  --text-num-lg--letter-spacing: -0.025em;
+
+  --text-num-hero: 2.5rem;
+  --text-num-hero--line-height: 1;
+  --text-num-hero--letter-spacing: -0.035em;
+
+  --radius-*: initial;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+
+  --shadow-*: initial;
+  --shadow-elevado: 0 18px 40px -18px light-dark(rgb(15 22 24 / 0.28), rgb(0 0 0 / 0.7));
+}
+
+/* Alvo de toque e leitura confortável no celular sem recalcular a escala inteira. */
+@media (width < 40rem) {
+  :root {
+    --text-sm: 0.875rem;
+    --text-md: 1rem;
+  }
+}
+
+@layer base {
+  body {
+    background-color: var(--c-fundo);
+    color: var(--c-texto);
+    font-family: var(--font-texto);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--c-foco) 22%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--c-foco);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  dialog::backdrop {
+    background-color: color-mix(in oklab, light-dark(#0f1618, #000000) 55%, transparent);
+    backdrop-filter: blur(2px);
+  }
+}
+
+@utility valor {
+  font-family: var(--font-numero);
+  font-variant-numeric: tabular-nums slashed-zero;
+}

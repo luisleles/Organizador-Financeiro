@@ -43,3 +43,28 @@ export function parseBRLInput(input: string): number {
 
   return toCents(isNegative ? -value : value);
 }
+
+const DECIMAL_FORMATTER = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export type MoneyParts = {
+  /** Sinal explícito; usa o menos tipográfico (U+2212), que alinha com os dígitos. */
+  sign: "+" | "−" | "";
+  whole: string;
+  fraction: string;
+};
+
+/**
+ * Separa reais de centavos para que a coluna de valores possa renderizar os centavos
+ * menores e mais claros sem perder o alinhamento da vírgula.
+ */
+export function formatBRLParts(cents: number): MoneyParts {
+  const sign = cents > 0 ? "+" : cents < 0 ? "−" : "";
+  const [whole = "0", fraction = "00"] = DECIMAL_FORMATTER.format(Math.abs(fromCents(cents))).split(
+    ",",
+  );
+
+  return { sign, whole, fraction };
+}
