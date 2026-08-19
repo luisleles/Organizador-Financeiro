@@ -1,21 +1,21 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { isActive, type NavItem } from "@/lib/navigation";
+import type { NavItem } from "@/lib/navigation";
 import { NavIcon } from "./nav-icon";
 
 type NavLinkProps = {
   item: NavItem;
   query: string;
   variant: "rail" | "bar";
+  active: boolean;
 };
 
-export function NavLink({ item, query, variant }: NavLinkProps) {
-  const pathname = usePathname();
-  const active = isActive(pathname, item.href);
-
+/**
+ * Puramente apresentacional — sem `usePathname`. O estado ativo chega por prop para que
+ * este componente possa ser renderizado tanto no servidor quanto dentro de um componente
+ * de cliente. Ver `app-shell.tsx` para o porquê.
+ */
+export function NavLink({ item, query, variant, active }: NavLinkProps) {
   if (variant === "bar") {
     return (
       <Link

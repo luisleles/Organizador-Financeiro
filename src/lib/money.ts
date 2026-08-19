@@ -68,3 +68,12 @@ export function formatBRLParts(cents: number): MoneyParts {
 
   return { sign, whole, fraction };
 }
+
+/**
+ * Valor pronto para preencher um `<input>` de dinheiro: sem símbolo de moeda e com sinal
+ * ASCII, para que `parseBRLInput` consiga ler de volta o que ele mesmo escreveu.
+ */
+export function formatCentsForInput(cents: number): string {
+  const { whole, fraction } = formatBRLParts(cents);
+  return `${cents < 0 ? "-" : ""}${whole},${fraction}`;
+}

@@ -39,7 +39,13 @@ export function BarNav({ query }: BarNavProps) {
         className="border-linha bg-superficie fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 border-t px-2 pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         {primaryItems.map((item) => (
-          <NavLink key={item.href} item={item} query={query} variant="bar" />
+          <NavLink
+            key={item.href}
+            item={item}
+            query={query}
+            variant="bar"
+            active={isActive(pathname, item.href)}
+          />
         ))}
         <button
           type="button"

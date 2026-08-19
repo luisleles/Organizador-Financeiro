@@ -24,8 +24,14 @@ type AmountProps = {
   cents: number;
   tone?: AmountTone;
   size?: AmountSize;
-  showSign?: boolean;
+  /**
+   * `always` para linha de extrato (+/−), `negative` para saldo (só o menos, porque um
+   * saldo negativo sem sinal mente), `never` para grandeza sem direção, como um limite.
+   */
+  sign?: "always" | "negative" | "never";
   showCurrency?: boolean;
+  /** Esconde os dígitos preservando a largura da coluna e o tom do valor. */
+  masked?: boolean;
   className?: string;
 };
 
@@ -33,13 +39,31 @@ export function Amount({
   cents,
   tone = "auto",
   size = "sm",
-  showSign = true,
+  sign = "always",
   showCurrency = false,
+  masked = false,
   className,
 }: AmountProps) {
-  const { sign, whole, fraction } = formatBRLParts(cents);
+  const parts = formatBRLParts(cents);
   const resolvedTone =
     tone === "auto" ? (cents < 0 ? "saida" : cents > 0 ? "entrada" : "neutro") : tone;
+  const signGlyph = sign === "never" || (sign === "negative" && cents >= 0) ? "" : parts.sign;
+
+  if (masked) {
+    return (
+      <span
+        aria-label="Valor oculto"
+        className={cn(
+          "valor whitespace-nowrap",
+          SIZE_CLASS[size],
+          TONE_CLASS[resolvedTone],
+          className,
+        )}
+      >
+        ••••
+      </span>
+    );
+  }
 
   return (
     <span
@@ -50,10 +74,10 @@ export function Amount({
         className,
       )}
     >
-      {showCurrency && <span className="text-texto-fraco mr-1">R$</span>}
-      {showSign && sign}
-      {whole}
-      <span className="text-[0.85em] opacity-70">,{fraction}</span>
+      {showCurrency && <span className="text-texto-fraco mr-1 text-[0.55em]">R$</span>}
+      {signGlyph}
+      {parts.whole}
+      <span className="text-[0.85em] opacity-70">,{parts.fraction}</span>
     </span>
   );
 }

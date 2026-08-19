@@ -1,13 +1,13 @@
-"use client";
-
-import { NAV_GROUPS } from "@/lib/navigation";
+import { NAV_GROUPS, isActive } from "@/lib/navigation";
 import { NavLink } from "./nav-link";
 
 type RailNavProps = {
   query: string;
+  /** `null` no fallback do Suspense, quando a rota ainda não é conhecida. */
+  pathname: string | null;
 };
 
-export function RailNav({ query }: RailNavProps) {
+export function RailNav({ query, pathname }: RailNavProps) {
   return (
     <div className="flex flex-col gap-6 py-5">
       <p className="font-display px-5 text-lg leading-none">
@@ -23,7 +23,13 @@ export function RailNav({ query }: RailNavProps) {
               {group.title}
             </h2>
             {group.items.map((item) => (
-              <NavLink key={item.href} item={item} query={query} variant="rail" />
+              <NavLink
+                key={item.href}
+                item={item}
+                query={query}
+                variant="rail"
+                active={pathname !== null && isActive(pathname, item.href)}
+              />
             ))}
           </div>
         ))}

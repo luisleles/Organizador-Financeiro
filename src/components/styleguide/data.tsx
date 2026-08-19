@@ -72,7 +72,7 @@ export function DataSection() {
         <div className="flex flex-col gap-8">
           <Specimen label="Valor">
             <div className="flex flex-wrap items-baseline gap-6">
-              <Amount cents={841290} size="hero" tone="neutro" showSign={false} showCurrency />
+              <Amount cents={841290} size="hero" tone="neutro" sign="negative" showCurrency />
               <Amount cents={240000} size="lg" />
               <Amount cents={-31240} size="md" />
               <Amount cents={-35400} size="md" tone="alerta" />
