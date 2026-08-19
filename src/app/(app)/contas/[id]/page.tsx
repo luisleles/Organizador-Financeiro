@@ -5,6 +5,7 @@ import { ACCOUNT_TYPE_LABELS, AccountMark } from "@/components/accounts/account-
 import { BalanceSparkline } from "@/components/accounts/balance-sparkline";
 import { CreditCardPanel } from "@/components/accounts/credit-card-panel";
 import { HideValuesToggle } from "@/components/accounts/hide-values-toggle";
+import { InvoiceStatement } from "@/components/accounts/invoice-statement";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -26,7 +27,7 @@ export default async function ContaPage({ params }: ContaPageProps) {
   const [detail, valuesHidden] = await Promise.all([getAccountDetail(id), readValuesHidden()]);
   if (!detail) notFound();
 
-  const { account, entries, balanceSeries } = detail;
+  const { account, entries, balanceSeries, invoices } = detail;
   const card = account.creditCard;
 
   return (
@@ -121,7 +122,18 @@ export default async function ContaPage({ params }: ContaPageProps) {
       </div>
 
       <Card
-        title={entries.length > 0 ? `Últimos ${entries.length} lançamentos` : "Extrato"}
+        title={
+          invoices
+            ? "Extrato por fatura"
+            : entries.length > 0
+              ? `Últimos ${entries.length} lançamentos`
+              : "Extrato"
+        }
+        action={
+          invoices && invoices.length > 0 ? (
+            <span className="text-texto-fraco text-xs">últimas faturas</span>
+          ) : undefined
+        }
         className="overflow-hidden"
       >
         {entries.length === 0 ? (
@@ -132,6 +144,12 @@ export default async function ContaPage({ params }: ContaPageProps) {
                 ? "A fatura é exatamente o valor inicial que você cadastrou."
                 : "O saldo é exatamente o saldo inicial que você cadastrou."
             }
+          />
+        ) : invoices ? (
+          <InvoiceStatement
+            invoices={invoices}
+            accountName={account.name}
+            valuesHidden={valuesHidden}
           />
         ) : (
           <Table caption={`Extrato de ${account.name}`}>

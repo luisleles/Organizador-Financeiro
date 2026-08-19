@@ -61,7 +61,7 @@ export function TableCell({ value, muted, className, children, ...props }: Table
 }
 
 type TableGroupRowProps = {
-  label: string;
+  label: ReactNode;
   total: ReactNode;
   columnSpan: number;
 };

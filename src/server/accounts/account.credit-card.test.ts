@@ -4,6 +4,8 @@ import {
   LIMIT_ALERT_PERCENT,
   creditCardCycle,
   creditCardPosition,
+  groupByInvoice,
+  invoiceHistoryStart,
   isLimitAlert,
 } from "./account.credit-card";
 
@@ -174,5 +176,94 @@ describe("creditCardCycle", () => {
 
   it("devolve zero dias quando fecha hoje", () => {
     expect(creditCardCycle(20, 28, at("2026-08-20")).daysUntilClosing).toBe(0);
+  });
+});
+
+describe("groupByInvoice", () => {
+  const CLOSING_DAY = 20;
+  const DUE_DAY = 28;
+  const today = new Date("2026-08-19T15:00:00Z");
+
+  const entry = (isoDate: string, amountCents: number) => ({
+    date: new Date(`${isoDate}T15:00:00Z`),
+    amountCents,
+  });
+
+  it("joga a compra depois do fechamento para a fatura seguinte", () => {
+    const groups = groupByInvoice(
+      [entry("2026-08-25", -10000), entry("2026-08-18", -5000)],
+      CLOSING_DAY,
+      DUE_DAY,
+      today,
+    );
+
+    expect(groups.map((group) => group.key)).toEqual(["2026-09-20", "2026-08-20"]);
+    expect(groups[0].entries).toHaveLength(1);
+    expect(groups[1].entries).toHaveLength(1);
+  });
+
+  it("inclui a compra feita no próprio dia do fechamento na fatura que fecha", () => {
+    const groups = groupByInvoice([entry("2026-08-20", -3000)], CLOSING_DAY, DUE_DAY, today);
+
+    expect(groups[0].key).toBe("2026-08-20");
+  });
+
+  it("soma o total de cada fatura no sinal do extrato", () => {
+    const groups = groupByInvoice(
+      [entry("2026-08-18", -10000), entry("2026-08-15", -2500), entry("2026-08-10", 4000)],
+      CLOSING_DAY,
+      DUE_DAY,
+      today,
+    );
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].totalCents).toBe(-8500);
+  });
+
+  it("marca fechada, aberta e futura conforme o ciclo de hoje", () => {
+    const groups = groupByInvoice(
+      [entry("2026-08-25", -1000), entry("2026-08-18", -1000), entry("2026-07-10", -1000)],
+      CLOSING_DAY,
+      DUE_DAY,
+      today,
+    );
+
+    expect(groups.map((group) => group.status)).toEqual(["futura", "aberta", "fechada"]);
+  });
+
+  it("devolve as datas de fechamento e vencimento de cada fatura", () => {
+    const [group] = groupByInvoice([entry("2026-08-18", -1000)], CLOSING_DAY, DUE_DAY, today);
+
+    expect(group.closingDate.toISOString()).toBe("2026-08-20T03:00:00.000Z");
+    expect(group.dueDate.toISOString()).toBe("2026-08-28T03:00:00.000Z");
+  });
+
+  it("preserva a ordem em que os lançamentos chegaram dentro da fatura", () => {
+    const [group] = groupByInvoice(
+      [entry("2026-08-18", -100), entry("2026-08-15", -200), entry("2026-08-12", -300)],
+      CLOSING_DAY,
+      DUE_DAY,
+      today,
+    );
+
+    expect(group.entries.map((e) => e.amountCents)).toEqual([-100, -200, -300]);
+  });
+
+  it("devolve lista vazia sem lançamentos", () => {
+    expect(groupByInvoice([], CLOSING_DAY, DUE_DAY, today)).toEqual([]);
+  });
+});
+
+describe("invoiceHistoryStart", () => {
+  it("recua o número pedido de faturas a partir da atual", () => {
+    const start = invoiceHistoryStart(20, 28, 3, new Date("2026-08-19T15:00:00Z"));
+
+    expect(start.toISOString()).toBe("2026-05-20T03:00:00.000Z");
+  });
+
+  it("encaixa o dia em mês curto ao recuar", () => {
+    const start = invoiceHistoryStart(31, 10, 1, new Date("2026-03-05T15:00:00Z"));
+
+    expect(start.toISOString()).toBe("2026-02-28T03:00:00.000Z");
   });
 });

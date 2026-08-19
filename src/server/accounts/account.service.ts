@@ -7,11 +7,17 @@ import {
   consolidateBalances,
   openingBalanceCents,
 } from "./account.balance";
-import { creditCardCycle, creditCardPosition } from "./account.credit-card";
+import {
+  creditCardCycle,
+  creditCardPosition,
+  groupByInvoice,
+  invoiceHistoryStart,
+} from "./account.credit-card";
 import type { AccountInput } from "./account.schema";
 import {
   isCreditCard,
   type AccountDetail,
+  type AccountInvoice,
   type AccountEntry,
   type AccountListing,
   type AccountSummary,
@@ -31,6 +37,12 @@ export class AccountServiceError extends Error {
 }
 
 const DEFAULT_ENTRY_LIMIT = 30;
+
+/** Quantas faturas fechadas o extrato de cartão carrega além da aberta. */
+const INVOICE_HISTORY_CYCLES = 3;
+
+/** Teto de segurança para o extrato de cartão, que é buscado por intervalo de datas. */
+const CARD_ENTRY_CAP = 300;
 
 /** As colunas que create e update gravam em comum — evita duas listas para sair de sincronia. */
 type PersistedAccountFields = {
@@ -88,6 +100,13 @@ export async function getAccountDetail(
   const account = await prisma.account.findFirst({ where: { id: accountId, userId } });
   if (!account) return null;
 
+  // Cartão busca por intervalo de datas, e não pelas N últimas linhas: cortar por
+  // quantidade deixaria a fatura mais antiga pela metade, sem total confiável.
+  const historyStart =
+    account.type === "CREDIT_CARD" && account.closingDay !== null && account.dueDay !== null
+      ? invoiceHistoryStart(account.closingDay, account.dueDay, INVOICE_HISTORY_CYCLES)
+      : null;
+
   const [totals, transactions] = await Promise.all([
     prisma.transaction.aggregate({
       where: { accountId, userId },
@@ -95,9 +114,9 @@ export async function getAccountDetail(
       _count: { _all: true },
     }),
     prisma.transaction.findMany({
-      where: { accountId, userId },
+      where: { accountId, userId, ...(historyStart ? { date: { gt: historyStart } } : {}) },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: entryLimit,
+      take: historyStart ? CARD_ENTRY_CAP : entryLimit,
       select: {
         id: true,
         date: true,
@@ -131,7 +150,11 @@ export async function getAccountDetail(
     ascending,
   );
 
-  return { account: summary, entries, balanceSeries };
+  const invoices: AccountInvoice[] | null = summary.creditCard
+    ? groupByInvoice(entries, summary.creditCard.closingDay, summary.creditCard.dueDay)
+    : null;
+
+  return { account: summary, entries, balanceSeries, invoices };
 }
 
 export async function createAccount(input: AccountInput): Promise<string> {

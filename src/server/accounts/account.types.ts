@@ -1,6 +1,6 @@
 import type { AccountType } from "@prisma/client";
 import type { BalancePoint, ConsolidatedBalance } from "./account.balance";
-import type { CreditCardCycle, CreditCardPosition } from "./account.credit-card";
+import type { CreditCardCycle, CreditCardPosition, InvoiceGroup } from "./account.credit-card";
 
 /** Termos cadastrados do cartão, presentes só quando `type` é `CREDIT_CARD`. */
 export type CreditCardTerms = {
@@ -45,10 +45,17 @@ export type AccountEntry = {
   isTransfer: boolean;
 };
 
+export type AccountInvoice = InvoiceGroup<AccountEntry>;
+
 export type AccountDetail = {
   account: AccountSummary;
   /** Do mais recente para o mais antigo, como o extrato é lido. */
   entries: AccountEntry[];
   /** Do mais antigo para o mais recente, como o gráfico é desenhado. */
   balanceSeries: BalancePoint[];
+  /**
+   * Só para cartão: o mesmo extrato agrupado pela fatura em que cada lançamento cai, da
+   * mais recente para a mais antiga. `null` em conta que não é cartão.
+   */
+  invoices: AccountInvoice[] | null;
 };

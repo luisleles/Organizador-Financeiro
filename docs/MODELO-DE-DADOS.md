@@ -103,6 +103,16 @@ O consolidado é apresentado em três blocos — saldo em contas, faturas em abe
 líquido — porque um total único esconde exatamente a informação que faz alguém se
 enganar sobre quanto tem.
 
+O extrato de cartão é agrupado por fatura, e não por dia: um lançamento cai na primeira
+fatura que fecha na data dele ou depois. Compra do dia 25 com fechamento no dia 20 entra
+na fatura do mês seguinte — inclusive o pagamento da fatura anterior, que é o que os
+extratos de cartão de verdade mostram. Cada grupo é marcado como `fechada`, `aberta` ou
+`futura` conforme o ciclo de hoje.
+
+Por isso o extrato de cartão é buscado por **intervalo de datas**, e não pelas N últimas
+linhas: cortar por quantidade deixaria a fatura mais antiga pela metade, com um total que
+não corresponde a nada.
+
 ### Por que transferência usa duas linhas
 
 Uma transferência entre contas (ex.: do Nubank para a poupança) é representada por
