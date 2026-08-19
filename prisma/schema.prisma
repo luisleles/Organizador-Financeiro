@@ -116,11 +116,18 @@ model Transaction {
   amountCents     Int
   type            TransactionType
   transferGroupId String?
-  notes           String?
-  provider        String?
-  externalId      String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+
+  // Parcelamento de cartão: as parcelas de uma mesma compra compartilham o
+  // `installmentGroupId`. Só os campos por enquanto — a geração das parcelas vem depois.
+  installmentGroupId String?
+  installmentNumber  Int?
+  installmentTotal   Int?
+
+  notes      String?
+  provider   String?
+  externalId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)

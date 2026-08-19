@@ -9,20 +9,26 @@ type ConsolidatedBalanceCardProps = {
   valuesHidden: boolean;
 };
 
+/**
+ * Três blocos, não um total só: misturar dívida de cartão com saldo em conta esconde
+ * exatamente a informação que faz alguém se enganar sobre quanto tem.
+ */
 export function ConsolidatedBalanceCard({
   consolidated,
   activeAccountCount,
   valuesHidden,
 }: ConsolidatedBalanceCardProps) {
+  const { accountsBalanceCents, openInvoicesCents, netCents } = consolidated;
+
   return (
     <Card title="Patrimônio" action={<HideValuesToggle hidden={valuesHidden} />}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-1">
-          <p className="text-2xs text-texto-fraco font-semibold uppercase">Saldo consolidado</p>
+          <p className="text-2xs text-texto-fraco font-semibold uppercase">Saldo líquido</p>
           <Amount
-            cents={consolidated.totalCents}
+            cents={netCents}
             size="hero"
-            tone={consolidated.totalCents < 0 ? "alerta" : "neutro"}
+            tone={netCents < 0 ? "alerta" : "neutro"}
             sign="negative"
             showCurrency
             masked={valuesHidden}
@@ -32,27 +38,27 @@ export function ConsolidatedBalanceCard({
           </p>
         </div>
 
-        <dl className="flex gap-8">
+        <dl className="border-linha flex gap-8 border-t pt-3 sm:border-t-0 sm:pt-0">
           <div className="flex flex-col gap-1">
-            <dt className="text-2xs text-texto-fraco font-semibold uppercase">Ativos</dt>
+            <dt className="text-2xs text-texto-fraco font-semibold uppercase">Saldo em contas</dt>
             <dd>
               <Amount
-                cents={consolidated.assetsCents}
+                cents={accountsBalanceCents}
                 size="md"
-                tone="entrada"
+                tone={accountsBalanceCents < 0 ? "alerta" : "entrada"}
                 sign="negative"
                 masked={valuesHidden}
               />
             </dd>
           </div>
           <div className="flex flex-col gap-1">
-            <dt className="text-2xs text-texto-fraco font-semibold uppercase">Passivos</dt>
+            <dt className="text-2xs text-texto-fraco font-semibold uppercase">Faturas em aberto</dt>
             <dd>
               <Amount
-                cents={consolidated.liabilitiesCents}
+                cents={openInvoicesCents}
                 size="md"
-                tone={consolidated.liabilitiesCents > 0 ? "saida" : "neutro"}
-                sign="negative"
+                tone={openInvoicesCents > 0 ? "saida" : "neutro"}
+                sign="never"
                 masked={valuesHidden}
               />
             </dd>

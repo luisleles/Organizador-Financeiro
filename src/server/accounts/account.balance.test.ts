@@ -45,21 +45,39 @@ describe("sumMovementCents", () => {
 });
 
 describe("consolidateBalances", () => {
-  it("separa ativo de passivo e devolve o líquido", () => {
-    const totals = consolidateBalances([320000, 500000, -38050]);
+  const checking = (balanceCents: number) => ({ balanceCents, isCreditCard: false });
+  const card = (balanceCents: number) => ({ balanceCents, isCreditCard: true });
+
+  it("separa saldo em contas de faturas em aberto", () => {
+    const totals = consolidateBalances([checking(320000), checking(500000), card(-38050)]);
 
     expect(totals).toEqual({
-      totalCents: 781950,
-      assetsCents: 820000,
-      liabilitiesCents: 38050,
+      accountsBalanceCents: 820000,
+      openInvoicesCents: 38050,
+      netCents: 781950,
     });
   });
 
-  it("trata uma carteira zerada como nem ativo nem passivo", () => {
-    expect(consolidateBalances([0])).toEqual({
-      totalCents: 0,
-      assetsCents: 0,
-      liabilitiesCents: 0,
+  it("conta corrente negativa reduz o saldo em contas, e não vira fatura", () => {
+    const totals = consolidateBalances([checking(-11687), checking(320000)]);
+
+    expect(totals.accountsBalanceCents).toBe(308313);
+    expect(totals.openInvoicesCents).toBe(0);
+  });
+
+  it("cartão pago a mais entra como dinheiro disponível, não como fatura negativa", () => {
+    const totals = consolidateBalances([checking(300000), card(44518)]);
+
+    expect(totals.accountsBalanceCents).toBe(344518);
+    expect(totals.openInvoicesCents).toBe(0);
+    expect(totals.netCents).toBe(344518);
+  });
+
+  it("trata uma carteira zerada como nem saldo nem fatura", () => {
+    expect(consolidateBalances([checking(0)])).toEqual({
+      accountsBalanceCents: 0,
+      openInvoicesCents: 0,
+      netCents: 0,
     });
   });
 });
@@ -80,30 +98,29 @@ describe("transferência entre contas próprias", () => {
 
   it("não muda o total consolidado", () => {
     const before = consolidateBalances([
-      calculateBalanceCents(CHECKING_INITIAL, []),
-      calculateBalanceCents(SAVINGS_INITIAL, []),
+      { balanceCents: calculateBalanceCents(CHECKING_INITIAL, []), isCreditCard: false },
+      { balanceCents: calculateBalanceCents(SAVINGS_INITIAL, []), isCreditCard: false },
     ]);
 
     const after = consolidateBalances([
-      calculateBalanceCents(CHECKING_INITIAL, [outgoingLeg]),
-      calculateBalanceCents(SAVINGS_INITIAL, [incomingLeg]),
+      { balanceCents: calculateBalanceCents(CHECKING_INITIAL, [outgoingLeg]), isCreditCard: false },
+      { balanceCents: calculateBalanceCents(SAVINGS_INITIAL, [incomingLeg]), isCreditCard: false },
     ]);
 
-    expect(after.totalCents).toBe(before.totalCents);
-    expect(after.totalCents).toBe(820000);
+    expect(after.netCents).toBe(before.netCents);
+    expect(after.netCents).toBe(820000);
   });
 
   it("também não muda o total quando a origem fica negativa", () => {
     const emptyWallet = 0;
 
     const after = consolidateBalances([
-      calculateBalanceCents(emptyWallet, [outgoingLeg]),
-      calculateBalanceCents(SAVINGS_INITIAL, [incomingLeg]),
+      { balanceCents: calculateBalanceCents(emptyWallet, [outgoingLeg]), isCreditCard: false },
+      { balanceCents: calculateBalanceCents(SAVINGS_INITIAL, [incomingLeg]), isCreditCard: false },
     ]);
 
-    expect(after.totalCents).toBe(SAVINGS_INITIAL);
-    expect(after.assetsCents).toBe(620000);
-    expect(after.liabilitiesCents).toBe(120000);
+    expect(after.netCents).toBe(SAVINGS_INITIAL);
+    expect(after.accountsBalanceCents).toBe(SAVINGS_INITIAL);
   });
 });
 

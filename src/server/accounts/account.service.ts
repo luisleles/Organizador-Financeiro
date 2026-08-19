@@ -7,13 +7,15 @@ import {
   consolidateBalances,
   openingBalanceCents,
 } from "./account.balance";
+import { creditCardCycle, creditCardPosition } from "./account.credit-card";
 import type { AccountInput } from "./account.schema";
-import type {
-  AccountDetail,
-  AccountEntry,
-  AccountListing,
-  AccountSummary,
-  CreditCardTerms,
+import {
+  isCreditCard,
+  type AccountDetail,
+  type AccountEntry,
+  type AccountListing,
+  type AccountSummary,
+  type CreditCardStatus,
 } from "./account.types";
 
 export type AccountErrorCode = "NOT_FOUND" | "HAS_TRANSACTIONS";
@@ -66,7 +68,12 @@ export async function listAccounts(
   return {
     accounts: summaries,
     consolidated: consolidateBalances(
-      summaries.filter((summary) => !summary.archived).map((summary) => summary.balanceCents),
+      summaries
+        .filter((summary) => !summary.archived)
+        .map((summary) => ({
+          balanceCents: summary.balanceCents,
+          isCreditCard: isCreditCard(summary),
+        })),
     ),
   };
 }
@@ -205,6 +212,7 @@ async function aggregateTotals(userId: string): Promise<Map<string, AccountTotal
 
 function toSummary(account: Account, totals: AccountTotals | undefined): AccountSummary {
   const { movementCents, transactionCount } = totals ?? { movementCents: 0, transactionCount: 0 };
+  const balanceCents = accountBalanceCents(account.initialBalanceCents, movementCents);
 
   return {
     id: account.id,
@@ -215,13 +223,13 @@ function toSummary(account: Account, totals: AccountTotals | undefined): Account
     icon: account.icon,
     archived: account.archived,
     initialBalanceCents: account.initialBalanceCents,
-    balanceCents: accountBalanceCents(account.initialBalanceCents, movementCents),
+    balanceCents,
     transactionCount,
-    creditCard: toCreditCardTerms(account),
+    creditCard: toCreditCardStatus(account, balanceCents),
   };
 }
 
-function toCreditCardTerms(account: Account): CreditCardTerms | null {
+function toCreditCardStatus(account: Account, balanceCents: number): CreditCardStatus | null {
   if (account.type !== "CREDIT_CARD") return null;
   if (account.closingDay === null || account.dueDay === null || account.creditLimitCents === null) {
     return null;
@@ -231,6 +239,8 @@ function toCreditCardTerms(account: Account): CreditCardTerms | null {
     closingDay: account.closingDay,
     dueDay: account.dueDay,
     creditLimitCents: account.creditLimitCents,
+    ...creditCardPosition(balanceCents, account.creditLimitCents),
+    ...creditCardCycle(account.closingDay, account.dueDay),
   };
 }
 

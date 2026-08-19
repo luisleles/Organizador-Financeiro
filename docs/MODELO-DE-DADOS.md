@@ -79,6 +79,29 @@ WHEN type = ...` nas queries.
 - `@@index([userId, date])` e `@@index([accountId, date])` existem porque as duas
   consultas mais comuns do app são "extrato de uma conta" e "transações de um período",
   ambas ordenadas por data.
+- `installmentGroupId`, `installmentNumber` e `installmentTotal` guardam parcelamento de
+  cartão: as parcelas de uma mesma compra compartilham o grupo, e cada linha sabe que é a
+  `n` de `total`. Por enquanto só os campos existem — a geração das parcelas ainda não
+  foi implementada, e nada no app os preenche.
+
+### Cartão de crédito
+
+O saldo de um cartão é a fatura em aberto, e nasce negativo: cada compra é uma linha com
+`amountCents` negativo, e o pagamento da fatura é uma **transferência** da conta corrente
+para o cartão, ou seja, duas linhas que se anulam. Três consequências, todas cobertas por
+teste em `src/server/accounts/account.credit-card.test.ts`:
+
+- **A fatura é `min(saldo, 0)`.** Quem paga a mais fica com saldo positivo no cartão; isso
+  é crédito a favor, não fatura negativa.
+- **O limite disponível nunca entra no patrimônio.** Limite é crédito de terceiro. Dobrar
+  o limite do cartão não muda um centavo do saldo consolidado.
+- **Pagar a fatura não muda o saldo líquido.** O ativo cai e a dívida cai no mesmo valor;
+  o que muda é a composição. Se o líquido subisse ou descesse ao pagar uma fatura, seria
+  sinal de que o pagamento virou despesa nova ou perdeu a perna de saída.
+
+O consolidado é apresentado em três blocos — saldo em contas, faturas em aberto e saldo
+líquido — porque um total único esconde exatamente a informação que faz alguém se
+enganar sobre quanto tem.
 
 ### Por que transferência usa duas linhas
 

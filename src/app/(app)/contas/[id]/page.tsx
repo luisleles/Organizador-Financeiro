@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
 import { AccountDangerZone } from "@/components/accounts/account-danger-zone";
 import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
 import { ACCOUNT_TYPE_LABELS, AccountMark } from "@/components/accounts/account-meta";
 import { BalanceSparkline } from "@/components/accounts/balance-sparkline";
+import { CreditCardPanel } from "@/components/accounts/credit-card-panel";
 import { HideValuesToggle } from "@/components/accounts/hide-values-toggle";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableCell, TableHeadCell } from "@/components/ui/table";
 import { formatDate } from "@/lib/date";
+import { isLimitAlert } from "@/server/accounts/account.credit-card";
 import { getAccountDetail } from "@/server/accounts/account.service";
 import { readValuesHidden } from "@/server/preferences";
 import { deleteAccountAction, setAccountArchivedAction, updateAccountAction } from "../actions";
@@ -26,9 +27,7 @@ export default async function ContaPage({ params }: ContaPageProps) {
   if (!detail) notFound();
 
   const { account, entries, balanceSeries } = detail;
-  const available = account.creditCard
-    ? account.creditCard.creditLimitCents + account.balanceCents
-    : null;
+  const card = account.creditCard;
 
   return (
     <div className="flex flex-col gap-6">
@@ -51,31 +50,65 @@ export default async function ContaPage({ params }: ContaPageProps) {
         </div>
       </header>
 
-      <div className={account.creditCard ? "grid gap-6 lg:grid-cols-[2fr_1fr]" : "grid gap-6"}>
-        <Card title="Saldo atual">
+      <div className={card ? "grid gap-6 lg:grid-cols-[2fr_1fr]" : "grid gap-6"}>
+        <Card title={card ? "Fatura atual" : "Saldo atual"}>
           <div className="flex flex-col gap-4">
+            {/* Cartão não tem saldo: o número principal é o quanto se deve. */}
             <Amount
-              cents={account.balanceCents}
+              cents={card ? Math.abs(card.currentDebtCents) : account.balanceCents}
               size="hero"
-              tone={account.balanceCents < 0 ? "alerta" : "neutro"}
-              sign="negative"
+              tone={cardTone(card, account.balanceCents)}
+              sign={card ? "never" : "negative"}
               showCurrency
               masked={valuesHidden}
             />
-            <BalanceSparkline points={balanceSeries} className="h-16 w-full" />
+            <BalanceSparkline
+              points={balanceSeries}
+              tone={card ? (isLimitAlert(card.limitUsagePercent) ? "alerta" : "saida") : "auto"}
+              className="h-16 w-full"
+            />
             <dl className="border-linha flex flex-wrap gap-x-8 gap-y-2 border-t pt-3 text-xs">
-              <div className="flex items-center gap-2">
-                <dt className="text-texto-fraco">Saldo inicial</dt>
-                <dd>
-                  <Amount
-                    cents={account.initialBalanceCents}
-                    size="xs"
-                    tone="neutro"
-                    sign="negative"
-                    masked={valuesHidden}
-                  />
-                </dd>
-              </div>
+              {card ? (
+                <div className="flex items-center gap-2">
+                  <dt className="text-texto-fraco">Limite disponível</dt>
+                  <dd>
+                    <Amount
+                      cents={card.availableLimitCents}
+                      size="xs"
+                      tone={card.availableLimitCents < 0 ? "alerta" : "entrada"}
+                      sign="negative"
+                      masked={valuesHidden}
+                    />
+                  </dd>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <dt className="text-texto-fraco">Saldo inicial</dt>
+                  <dd>
+                    <Amount
+                      cents={account.initialBalanceCents}
+                      size="xs"
+                      tone="neutro"
+                      sign="negative"
+                      masked={valuesHidden}
+                    />
+                  </dd>
+                </div>
+              )}
+              {card && card.creditBalanceCents > 0 && (
+                <div className="flex items-center gap-2">
+                  <dt className="text-texto-fraco">Crédito a favor</dt>
+                  <dd>
+                    <Amount
+                      cents={card.creditBalanceCents}
+                      size="xs"
+                      tone="entrada"
+                      sign="never"
+                      masked={valuesHidden}
+                    />
+                  </dd>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <dt className="text-texto-fraco">Lançamentos</dt>
                 <dd className="valor text-num-xs">{account.transactionCount}</dd>
@@ -84,36 +117,7 @@ export default async function ContaPage({ params }: ContaPageProps) {
           </div>
         </Card>
 
-        {account.creditCard && (
-          <Card title="Fatura">
-            <dl className="flex flex-col gap-3 text-sm">
-              <Row label="Fecha no dia">
-                <span className="valor text-num-sm">{account.creditCard.closingDay}</span>
-              </Row>
-              <Row label="Vence no dia">
-                <span className="valor text-num-sm">{account.creditCard.dueDay}</span>
-              </Row>
-              <Row label="Limite">
-                <Amount
-                  cents={account.creditCard.creditLimitCents}
-                  size="sm"
-                  tone="neutro"
-                  sign="negative"
-                  masked={valuesHidden}
-                />
-              </Row>
-              <Row label="Disponível">
-                <Amount
-                  cents={available ?? 0}
-                  size="sm"
-                  tone={(available ?? 0) < 0 ? "alerta" : "entrada"}
-                  sign="negative"
-                  masked={valuesHidden}
-                />
-              </Row>
-            </dl>
-          </Card>
-        )}
+        {card && <CreditCardPanel card={card} valuesHidden={valuesHidden} />}
       </div>
 
       <Card
@@ -122,8 +126,12 @@ export default async function ContaPage({ params }: ContaPageProps) {
       >
         {entries.length === 0 ? (
           <EmptyState
-            title="Nenhum lançamento nesta conta"
-            description="O saldo é exatamente o saldo inicial que você cadastrou."
+            title={card ? "Nenhum lançamento neste cartão" : "Nenhum lançamento nesta conta"}
+            description={
+              card
+                ? "A fatura é exatamente o valor inicial que você cadastrou."
+                : "O saldo é exatamente o saldo inicial que você cadastrou."
+            }
           />
         ) : (
           <Table caption={`Extrato de ${account.name}`}>
@@ -171,11 +179,12 @@ export default async function ContaPage({ params }: ContaPageProps) {
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="border-linha flex items-center justify-between gap-4 border-b pb-2 last:border-b-0 last:pb-0">
-      <dt className="text-texto-fraco">{label}</dt>
-      <dd>{children}</dd>
-    </div>
-  );
+/** Dívida dentro do limite é ocre; carmim fica reservado para o limite quase no fim. */
+function cardTone(
+  card: { limitUsagePercent: number; currentDebtCents: number } | null,
+  balanceCents: number,
+): "alerta" | "saida" | "neutro" {
+  if (!card) return balanceCents < 0 ? "alerta" : "neutro";
+  if (card.currentDebtCents === 0) return "neutro";
+  return isLimitAlert(card.limitUsagePercent) ? "alerta" : "saida";
 }

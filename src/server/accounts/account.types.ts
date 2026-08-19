@@ -1,12 +1,16 @@
 import type { AccountType } from "@prisma/client";
 import type { BalancePoint, ConsolidatedBalance } from "./account.balance";
+import type { CreditCardCycle, CreditCardPosition } from "./account.credit-card";
 
-/** Dados de fatura, presentes só quando `type` é `CREDIT_CARD`. */
+/** Termos cadastrados do cartão, presentes só quando `type` é `CREDIT_CARD`. */
 export type CreditCardTerms = {
   closingDay: number;
   dueDay: number;
   creditLimitCents: number;
 };
+
+/** Termos mais a posição calculada: fatura, limite disponível, uso e datas do ciclo. */
+export type CreditCardStatus = CreditCardTerms & CreditCardPosition & CreditCardCycle;
 
 export type AccountSummary = {
   id: string;
@@ -19,7 +23,7 @@ export type AccountSummary = {
   initialBalanceCents: number;
   balanceCents: number;
   transactionCount: number;
-  creditCard: CreditCardTerms | null;
+  creditCard: CreditCardStatus | null;
 };
 
 export type AccountListing = {
@@ -27,6 +31,10 @@ export type AccountListing = {
   /** Consolida apenas as contas ativas: conta arquivada não entra no patrimônio. */
   consolidated: ConsolidatedBalance;
 };
+
+export function isCreditCard(account: AccountSummary): boolean {
+  return account.type === "CREDIT_CARD";
+}
 
 export type AccountEntry = {
   id: string;

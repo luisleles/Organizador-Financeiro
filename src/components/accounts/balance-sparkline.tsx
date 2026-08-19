@@ -3,8 +3,18 @@ import type { BalancePoint } from "@/server/accounts/account.balance";
 const VIEWBOX_WIDTH = 100;
 const VIEWBOX_HEIGHT = 32;
 
+type SparklineTone = "auto" | "entrada" | "saida" | "alerta";
+
+const TONE_CLASS: Record<Exclude<SparklineTone, "auto">, string> = {
+  entrada: "text-entrada",
+  saida: "text-saida",
+  alerta: "text-alerta",
+};
+
 type BalanceSparklineProps = {
   points: readonly BalancePoint[];
+  /** Fatura de cartão é `saida`, não alerta: dívida dentro do limite é normal. */
+  tone?: SparklineTone;
   className?: string;
 };
 
@@ -12,7 +22,7 @@ type BalanceSparklineProps = {
  * Evolução do saldo no recorte carregado. O eixo é esticado sem manter proporção, então a
  * linha usa `non-scaling-stroke` para não engordar horizontalmente.
  */
-export function BalanceSparkline({ points, className }: BalanceSparklineProps) {
+export function BalanceSparkline({ points, tone = "auto", className }: BalanceSparklineProps) {
   if (points.length < 2) return null;
 
   const values = points.map((point) => point.balanceCents);
@@ -25,7 +35,7 @@ export function BalanceSparkline({ points, className }: BalanceSparklineProps) {
 
   const line = values.map((cents, index) => `${toX(index)},${toY(cents)}`).join(" ");
   const area = `${toX(0)},${toY(min)} ${line} ${toX(values.length - 1)},${toY(min)}`;
-  const isNegative = (values.at(-1) ?? 0) < 0;
+  const resolvedTone = tone === "auto" ? ((values.at(-1) ?? 0) < 0 ? "alerta" : "entrada") : tone;
 
   return (
     <svg
@@ -33,7 +43,7 @@ export function BalanceSparkline({ points, className }: BalanceSparklineProps) {
       aria-label="Evolução do saldo no período carregado"
       viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
       preserveAspectRatio="none"
-      className={isNegative ? `text-alerta ${className ?? ""}` : `text-entrada ${className ?? ""}`}
+      className={`${TONE_CLASS[resolvedTone]} ${className ?? ""}`}
     >
       <polygon points={area} fill="currentColor" opacity="0.12" />
       {min < 0 && max > 0 && (

@@ -20,13 +20,22 @@ export type BalancePoint = {
   balanceCents: number;
 };
 
+export type ConsolidationEntry = {
+  balanceCents: number;
+  isCreditCard: boolean;
+};
+
 export type ConsolidatedBalance = {
-  /** Patrimônio líquido: ativos menos passivos. */
-  totalCents: number;
-  /** Soma apenas das contas com saldo positivo. */
-  assetsCents: number;
-  /** Soma, em módulo, das contas com saldo negativo — cartão de crédito, cheque especial. */
-  liabilitiesCents: number;
+  /**
+   * Saldo em contas: tudo que não é dívida de cartão. Inclui o crédito de um cartão pago
+   * a mais, que é dinheiro disponível, para que `netCents` continue sendo exatamente a
+   * soma dos saldos de todas as contas.
+   */
+  accountsBalanceCents: number;
+  /** Faturas em aberto, em módulo. Sempre `>= 0`. */
+  openInvoicesCents: number;
+  /** Saldo líquido: contas menos faturas. */
+  netCents: number;
 };
 
 export function sumMovementCents(entries: readonly MovementEntry[]): number {
@@ -44,15 +53,28 @@ export function calculateBalanceCents(
   return accountBalanceCents(initialBalanceCents, sumMovementCents(entries));
 }
 
-export function consolidateBalances(balancesCents: readonly number[]): ConsolidatedBalance {
-  return balancesCents.reduce<ConsolidatedBalance>(
-    (totals, balanceCents) => ({
-      totalCents: totals.totalCents + balanceCents,
-      assetsCents: totals.assetsCents + Math.max(balanceCents, 0),
-      liabilitiesCents: totals.liabilitiesCents + Math.max(-balanceCents, 0),
-    }),
-    { totalCents: 0, assetsCents: 0, liabilitiesCents: 0 },
-  );
+/**
+ * O limite disponível de um cartão **nunca** entra aqui: limite é crédito de terceiro, não
+ * patrimônio. O cartão participa apenas pela dívida, que é negativa.
+ */
+export function consolidateBalances(entries: readonly ConsolidationEntry[]): ConsolidatedBalance {
+  let accountsBalanceCents = 0;
+  let openInvoicesCents = 0;
+
+  for (const entry of entries) {
+    const isDebt = entry.isCreditCard && entry.balanceCents < 0;
+    if (isDebt) {
+      openInvoicesCents += -entry.balanceCents;
+    } else {
+      accountsBalanceCents += entry.balanceCents;
+    }
+  }
+
+  return {
+    accountsBalanceCents,
+    openInvoicesCents,
+    netCents: accountsBalanceCents - openInvoicesCents,
+  };
 }
 
 /**
