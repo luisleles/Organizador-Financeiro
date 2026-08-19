@@ -1,14 +1,15 @@
-import type { InputHTMLAttributes } from "react";
+import type { InputHTMLAttributes, Ref } from "react";
 import { cn } from "@/lib/cn";
 
 type InputProps = InputHTMLAttributes<HTMLInputElement> & {
+  ref?: Ref<HTMLInputElement>;
   invalid?: boolean;
   /** Alinha à direita e usa a fonte tabular — obrigatório em campo de valor. */
   numeric?: boolean;
   prefix?: string;
 };
 
-export function Input({ invalid, numeric, prefix, className, ...props }: InputProps) {
+export function Input({ ref, invalid, numeric, prefix, className, ...props }: InputProps) {
   return (
     <div className="relative flex items-center">
       {prefix && (
@@ -17,6 +18,7 @@ export function Input({ invalid, numeric, prefix, className, ...props }: InputPr
         </span>
       )}
       <input
+        ref={ref}
         aria-invalid={invalid || undefined}
         className={cn(
           "bg-superficie text-md text-texto placeholder:text-texto-fraco h-10 w-full rounded-md border px-3 transition disabled:cursor-not-allowed disabled:opacity-50",

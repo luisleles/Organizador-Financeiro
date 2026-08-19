@@ -10,5 +10,9 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",
+    globalSetup: ["./vitest.global-setup.mts"],
+    setupFiles: ["./vitest.setup.mts"],
+    // Um banco só, compartilhado: rodar arquivos em paralelo embaralharia as fixtures.
+    fileParallelism: false,
   },
 });

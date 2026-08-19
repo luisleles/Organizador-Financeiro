@@ -72,3 +72,49 @@ hidratados:
 A regra que ficou: **o conteúdo de um fallback de Suspense é markup inerte.** `NavLink` e
 `RailNav` são apresentacionais e recebem `pathname` por prop; quem chama os hooks é só o
 componente resolvido (`PeriodRailNav`).
+
+## Transações: decisões que valem para os próximos módulos
+
+### Paginação, e não scroll infinito
+
+A listagem pagina de 50 em 50, com links de anterior e próxima.
+
+O motivo é o mesmo que fez todo filtro morar na URL: **o estado da tela é o endereço**.
+Scroll infinito guarda "quanto já carreguei" em memória do cliente, então o link colado
+para alguém abre uma tela diferente da que se estava vendo, o botão voltar perde a
+posição, e não existe um "1–50 de 279" para conferir se o filtro pegou o que deveria.
+Somando a isso: a página é um Server Component que renderiza a tabela pronta, sem estado
+de carregamento nem sentinela de interseção, e a navegação por teclado funciona com
+links de verdade. Scroll infinito só ganharia se a lista fosse de descoberta, e um
+extrato é de conferência.
+
+### Filtros como `<form method="get">`
+
+O formulário de filtros é HTML puro: o navegador monta a URL, inclusive as listas de
+checkbox de conta, categoria e etiqueta, que viram parâmetros repetidos. Não há estado de
+filtro em React nenhum. Por isso a faixa de valor viaja em reais na URL (`min=100,00`) e
+não em centavos — é o que o campo envia sem tradução.
+
+O único JavaScript é cosmético: desligar os campos vazios no `submit`, para o endereço
+sair `?q=uber` em vez de `?q=uber&tipo=&min=&max=`. Sem script, o filtro continua
+funcionando; a URL só fica mais feia.
+
+### Transferência é uma coisa só, em duas linhas
+
+Uma transferência são duas linhas com o mesmo `transferGroupId` e valores opostos.
+Consequências, todas com teste:
+
+- **Editar reescreve as duas pernas dentro de um `$transaction`.** Se o grupo não tiver
+  exatamente duas linhas, o serviço recusa (`BROKEN_TRANSFER`) sem alterar nada.
+- **Excluir uma perna exclui a outra.** Vale inclusive na exclusão em lote da listagem:
+  os ids selecionados são expandidos pelos grupos antes do `deleteMany`.
+- **O formulário de lançamento comum recusa editar uma perna** (`NOT_A_TRANSFER`) e manda
+  para a tela de transferência, que é a única que conhece os dois lados.
+- **Categorizar em lote pula transferências**, porque transferência não tem categoria.
+
+### Teste de serviço com banco de verdade
+
+Provar que as duas pernas mudam juntas exige uma transação de banco real, não um dublê.
+`vitest.global-setup.mts` cria um SQLite descartável em `data/test.db` e roda
+`prisma migrate deploy`; `vitest.setup.mts` aponta a `DATABASE_URL` para ele antes de
+qualquer import do PrismaClient. Como o banco é um só, `fileParallelism` fica desligado.

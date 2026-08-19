@@ -1,14 +1,16 @@
-import type { SelectHTMLAttributes } from "react";
+import type { Ref, SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
   invalid?: boolean;
+  ref?: Ref<HTMLSelectElement>;
 };
 
-export function Select({ invalid, className, children, ...props }: SelectProps) {
+export function Select({ invalid, className, children, ref, ...props }: SelectProps) {
   return (
     <div className="relative flex items-center">
       <select
+        ref={ref}
         aria-invalid={invalid || undefined}
         className={cn(
           "bg-superficie text-md text-texto h-10 w-full appearance-none rounded-md border pr-9 pl-3 transition disabled:cursor-not-allowed disabled:opacity-50",
