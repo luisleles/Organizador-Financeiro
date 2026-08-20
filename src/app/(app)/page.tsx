@@ -118,7 +118,7 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
                     {account.name}
                   </Link>
                   {account.isCreditCard && <Badge tone="previsto">cartão</Badge>}
-                  <span className="ml-auto">
+                  <span className="ml-auto flex flex-col items-end">
                     <Amount
                       cents={account.totalBalanceCents}
                       size="xs"
@@ -126,6 +126,18 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
                       sign="negative"
                       masked={valuesHidden}
                     />
+                    {account.buckets.length > 0 && (
+                      <span className="text-texto-fraco text-xs">
+                        livre{" "}
+                        <Amount
+                          cents={account.availableBalanceCents}
+                          size="xs"
+                          tone="neutro"
+                          sign="negative"
+                          masked={valuesHidden}
+                        />
+                      </span>
+                    )}
                   </span>
                 </div>
 
