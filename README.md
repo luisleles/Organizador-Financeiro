@@ -32,8 +32,8 @@ mudou desde a última build, sobe o servidor e abre o navegador. Se o app já es
 ele apenas abre a aba. O atalho roda sem terminal, então o andamento aparece nas
 notificações do sistema e o registro completo fica em `data/abrir-app.log`.
 
-`scripts/fechar-app.sh` encerra o servidor — ele também é a ação "Fechar o app" no menu de
-contexto do atalho.
+`scripts/fechar-app.sh` encerra o servidor. Ele aparece como um segundo atalho, "Fechar
+Controle Financeiro", e também como a ação "Fechar o app" no menu de contexto do primeiro.
 
 Para instalar o atalho, com o caminho do projeto já preenchido:
 

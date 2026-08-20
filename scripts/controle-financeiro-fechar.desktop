@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Fechar Controle Financeiro
+Comment=Encerra o servidor do app
+Exec=bash "__PROJETO__/scripts/fechar-app.sh"
+Icon=application-exit
+Terminal=false
+Categories=Office;Finance;
