@@ -37,6 +37,25 @@
   --c-previsto-fill: light-dark(#afbbc0, #3a4a51);
 
   --c-foco: light-dark(#2653d9, #6b93ff);
+
+  /*
+    Paleta de gráfico, separada da paleta de interface. Os passos do modo escuro são
+    escolhidos, não derivados do claro: sobre fundo escuro a marca precisa de outra
+    luminosidade para não brilhar demais nem sumir. Os dois pares passam nos seis checks
+    de daltonismo e contraste (script `validate_palette.js` da skill de dataviz).
+  */
+  --c-grafico-receita: light-dark(#12a0a8, #23a4ac);
+  --c-grafico-despesa: light-dark(#c4741c, #c87c22);
+  --c-grafico-linha: light-dark(#1b2427, #e4eaec);
+  --c-grafico-grade: light-dark(#e2e7e9, #222f34);
+
+  /* Rampa sequencial de magnitude: um matiz só, do claro ao escuro. */
+  --c-calor-0: light-dark(#f4f7f7, #131c20);
+  --c-calor-1: light-dark(#f7eee2, #2a2313);
+  --c-calor-2: light-dark(#efd7b8, #4a3818);
+  --c-calor-3: light-dark(#e2b47c, #7a551c);
+  --c-calor-4: light-dark(#d18f3e, #a87322);
+  --c-calor-5: light-dark(#a85b12, #d18a2e);
 }
 
 :root[data-theme="light"] {
@@ -79,6 +98,18 @@
   --color-previsto-fill: var(--c-previsto-fill);
 
   --color-foco: var(--c-foco);
+
+  --color-grafico-receita: var(--c-grafico-receita);
+  --color-grafico-despesa: var(--c-grafico-despesa);
+  --color-grafico-linha: var(--c-grafico-linha);
+  --color-grafico-grade: var(--c-grafico-grade);
+
+  --color-calor-0: var(--c-calor-0);
+  --color-calor-1: var(--c-calor-1);
+  --color-calor-2: var(--c-calor-2);
+  --color-calor-3: var(--c-calor-3);
+  --color-calor-4: var(--c-calor-4);
+  --color-calor-5: var(--c-calor-5);
 }
 
 @theme {
