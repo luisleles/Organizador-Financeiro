@@ -231,6 +231,9 @@ model Goal {
   archived    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
+  /// Quando ligado, o progresso é o saldo da conta vinculada em vez da soma dos aportes.
+  useAccountBalance Boolean @default(false)
+
   user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   account       Account?           @relation(fields: [accountId], references: [id], onDelete: SetNull)
   contributions GoalContribution[]
