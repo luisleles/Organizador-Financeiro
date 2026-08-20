@@ -10,6 +10,7 @@ import { formatDate } from "@/lib/date";
 import { parsePeriod, resolvePeriod } from "@/lib/period";
 import { consolidateBalances } from "@/server/accounts/account.balance";
 import { readValuesHidden } from "@/server/preferences";
+import { currentMonth, getMonthlyBudgets } from "@/server/budgets/budget.service";
 import { getDashboard, listAccountBalances } from "@/server/reports/report.service";
 import type { Variation } from "@/server/reports/report.aggregations";
 
@@ -21,11 +22,14 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
   const params = toSearchParams(await searchParams);
   const period = resolvePeriod(parsePeriod(params));
 
-  const [dashboard, accounts, valuesHidden] = await Promise.all([
+  const [dashboard, accounts, budgets, valuesHidden] = await Promise.all([
     getDashboard(period),
     listAccountBalances(),
+    getMonthlyBudgets(currentMonth()),
     readValuesHidden(),
   ]);
+
+  const overBudget = budgets.rows.filter((row) => row.progress.status === "estourado");
 
   const consolidated = consolidateBalances(
     accounts.map((account) => ({
@@ -45,6 +49,32 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
         title="Início"
         description={`Retrato de ${period.label}. Transferências entre contas próprias não entram em receita nem em despesa.`}
       />
+
+      {overBudget.length > 0 && (
+        <aside
+          role="alert"
+          className="border-alerta bg-alerta-suave flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-4 py-3"
+        >
+          <span className="text-alerta text-sm font-medium">
+            {overBudget.length === 1
+              ? "1 categoria estourou o orçamento do mês"
+              : `${overBudget.length} categorias estouraram o orçamento do mês`}
+          </span>
+          <span className="text-texto-fraco text-sm">
+            {overBudget
+              .slice(0, 3)
+              .map((row) => row.name)
+              .join(", ")}
+            {overBudget.length > 3 && ` e mais ${overBudget.length - 3}`}
+          </span>
+          <Link
+            href="/orcamentos"
+            className="text-texto hover:text-alerta ml-auto text-xs underline underline-offset-4"
+          >
+            Ver orçamentos
+          </Link>
+        </aside>
+      )}
 
       <Card title="Patrimônio">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
