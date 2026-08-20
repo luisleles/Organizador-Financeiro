@@ -67,6 +67,8 @@ const transactionFormSchema = z
     categoryId: optionalId,
     tagIds: z.array(z.string()),
     notes: z.string().optional(),
+    installments: z.coerce.number().int().optional(),
+    installmentScope: z.string().optional(),
   })
   .pipe(transactionInputSchema);
 
@@ -187,7 +189,8 @@ export async function deleteTransactionsAction(
   if (!ids.success) return actionError("Selecione ao menos um lançamento.");
 
   try {
-    const removed = await deleteTransactions(ids.data);
+    const scope = formData.get("installmentScope") === "FUTURE" ? "FUTURE" : "SINGLE";
+    const removed = await deleteTransactions(ids.data, scope);
     revalidatePath("/transacoes");
     revalidatePath("/contas");
     return actionSuccess(
@@ -248,6 +251,8 @@ function readTransactionForm(formData: FormData) {
     categoryId: readText(formData, "categoryId"),
     tagIds: formData.getAll("tagIds").filter((value): value is string => typeof value === "string"),
     notes: readText(formData, "notes"),
+    installments: readText(formData, "installments") || "1",
+    installmentScope: readText(formData, "installmentScope") || "SINGLE",
   };
 }
 

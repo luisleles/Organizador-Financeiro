@@ -15,6 +15,19 @@ enum AccountType {
   CASH
 }
 
+enum AccountClass {
+  ASSET
+  LIABILITY
+}
+
+enum InvoiceStatus {
+  OPEN
+  CLOSED
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+}
+
 enum CategoryKind {
   INCOME
   EXPENSE
@@ -47,31 +60,59 @@ model User {
   budgets        Budget[]
   goals          Goal[]
   recurringRules RecurringRule[]
+  categoryRules  CategoryRule[]
 }
 
 model Account {
-  id                  String      @id @default(cuid())
+  id                  String       @id @default(cuid())
   userId              String
   name                String
   institution         String?
   type                AccountType
+  class               AccountClass
   initialBalanceCents Int
   color               String
   icon                String
-  archived            Boolean     @default(false)
-  createdAt           DateTime    @default(now())
+  archived            Boolean      @default(false)
+  createdAt           DateTime     @default(now())
 
-  // Preenchidos apenas quando type = CREDIT_CARD.
-  closingDay       Int?
-  dueDay           Int?
-  creditLimitCents Int?
-
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions   Transaction[]
-  goals          Goal[]
-  recurringRules RecurringRule[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditCardDetails CreditCardDetails?
+  transactions      Transaction[]
+  goals             Goal[]
+  recurringRules    RecurringRule[]
 
   @@index([userId])
+}
+
+model CreditCardDetails {
+  id               String  @id @default(cuid())
+  accountId        String  @unique
+  closingDay       Int
+  dueDay           Int
+  creditLimitCents Int
+  lastFourDigits   String?
+  brand            String?
+
+  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
+}
+
+model Invoice {
+  id                     String        @id @default(cuid())
+  creditCardDetailsId    String
+  referenceMonth         DateTime
+  closingDate            DateTime
+  dueDate                DateTime
+  status                 InvoiceStatus @default(OPEN)
+  paidAt                 DateTime?
+  paymentTransferGroupId String?
+
+  creditCardDetails CreditCardDetails @relation(fields: [creditCardDetailsId], references: [id], onDelete: Cascade)
+  transactions      Transaction[]
+
+  @@unique([creditCardDetailsId, referenceMonth])
+  @@index([creditCardDetailsId, closingDate])
 }
 
 model Category {
@@ -84,14 +125,36 @@ model Category {
   parentId String?
   archived Boolean      @default(false)
 
+  // Posição dentro do grupo de irmãos. Empate cai na ordem alfabética, o que mantém a
+  // lista estável antes de alguém arrastar qualquer coisa.
+  sortOrder Int @default(0)
+
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent         Category?       @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   subcategories  Category[]      @relation("CategoryHierarchy")
   transactions   Transaction[]
   budgets        Budget[]
   recurringRules RecurringRule[]
+  rules          CategoryRule[]
 
   @@index([userId])
+}
+
+/// Regra de categorização automática: "se a descrição contém `pattern`, use `categoryId`".
+model CategoryRule {
+  id         String   @id @default(cuid())
+  userId     String
+  pattern    String
+  categoryId String
+  /// Menor number é avaliado primeiro; empate desempata pelo padrão mais longo.
+  priority   Int      @default(0)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
 }
 
 model Tag {
@@ -116,9 +179,9 @@ model Transaction {
   amountCents     Int
   type            TransactionType
   transferGroupId String?
+  invoiceId       String?
 
-  // Parcelamento de cartão: as parcelas de uma mesma compra compartilham o
-  // `installmentGroupId`. Só os campos por enquanto — a geração das parcelas vem depois.
+  // Parcelas de uma compra compartilham o grupo e preservam sua posição no plano.
   installmentGroupId String?
   installmentNumber  Int?
   installmentTotal   Int?
@@ -132,12 +195,15 @@ model Transaction {
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  invoice  Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   tags     Tag[]
 
   // NULL não colide em índice único: várias transações sem externalId convivem normalmente.
   @@unique([provider, externalId])
   @@index([userId, date])
   @@index([accountId, date])
+  @@index([invoiceId])
+  @@index([installmentGroupId, installmentNumber])
 }
 
 model Budget {

@@ -16,13 +16,19 @@ type BalanceSparklineProps = {
   /** Fatura de cartão é `saida`, não alerta: dívida dentro do limite é normal. */
   tone?: SparklineTone;
   className?: string;
+  ariaLabel?: string;
 };
 
 /**
  * Evolução do saldo no recorte carregado. O eixo é esticado sem manter proporção, então a
  * linha usa `non-scaling-stroke` para não engordar horizontalmente.
  */
-export function BalanceSparkline({ points, tone = "auto", className }: BalanceSparklineProps) {
+export function BalanceSparkline({
+  points,
+  tone = "auto",
+  className,
+  ariaLabel = "Evolução do saldo no período carregado",
+}: BalanceSparklineProps) {
   if (points.length < 2) return null;
 
   const values = points.map((point) => point.balanceCents);
@@ -40,7 +46,7 @@ export function BalanceSparkline({ points, tone = "auto", className }: BalanceSp
   return (
     <svg
       role="img"
-      aria-label="Evolução do saldo no período carregado"
+      aria-label={ariaLabel}
       viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
       preserveAspectRatio="none"
       className={`${TONE_CLASS[resolvedTone]} ${className ?? ""}`}

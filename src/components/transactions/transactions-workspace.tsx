@@ -141,9 +141,11 @@ export function TransactionsWorkspace({
       <TableCell>
         <button
           type="button"
-          onClick={() =>
-            row.transferGroupId ? openTransfer(row) : setDialog({ kind: "edit-transaction", row })
-          }
+          onClick={() => {
+            if (row.invoiceId && row.transferGroupId) return;
+            if (row.transferGroupId) void openTransfer(row);
+            else setDialog({ kind: "edit-transaction", row });
+          }}
           className="text-texto text-left hover:underline hover:underline-offset-4"
         >
           {row.description}
@@ -157,6 +159,7 @@ export function TransactionsWorkspace({
             ))}
           </span>
         )}
+        {row.invoiceId && row.transferGroupId && <Badge tone="neutro">pagamento de fatura</Badge>}
       </TableCell>
       <TableCell muted className="hidden md:table-cell">
         {row.type === "TRANSFER" ? (
@@ -331,6 +334,8 @@ function emptyDefaults(today: string, options: FilterOptions): TransactionDefaul
     categoryId: "",
     tagIds: [],
     notes: "",
+    installments: "1",
+    installmentScope: "SINGLE",
   };
 }
 
@@ -339,8 +344,8 @@ function emptyTransfer(today: string, options: FilterOptions): TransferDefaults 
     date: today,
     description: "",
     amountCents: "",
-    fromAccountId: options.accounts[0]?.id ?? "",
-    toAccountId: options.accounts[1]?.id ?? options.accounts[0]?.id ?? "",
+    fromAccountId: options.transferAccounts[0]?.id ?? "",
+    toAccountId: options.transferAccounts[1]?.id ?? options.transferAccounts[0]?.id ?? "",
   };
 }
 
@@ -349,11 +354,13 @@ function rowToDefaults(row: TransactionRow): TransactionDefaults {
     date: toISODate(row.date),
     type: row.amountCents < 0 ? "EXPENSE" : "INCOME",
     accountId: row.accountId,
-    description: row.description,
+    description: row.description.replace(/ \(\d+\/\d+\)$/, ""),
     amountCents: formatCentsForInput(Math.abs(row.amountCents)),
     categoryId: row.categoryId ?? "",
     tagIds: row.tags.map((tag) => tag.id),
     notes: row.notes ?? "",
+    installments: "1",
+    installmentScope: row.installmentGroupId ? "SINGLE" : "",
   };
 }
 

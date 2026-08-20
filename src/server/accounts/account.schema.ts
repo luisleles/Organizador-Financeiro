@@ -39,6 +39,12 @@ const baseAccount = z.object({
   closingDay: dayOfMonth.nullable(),
   dueDay: dayOfMonth.nullable(),
   creditLimitCents: z.number().int().min(0).nullable(),
+  lastFourDigits: z
+    .string()
+    .trim()
+    .regex(/^\d{4}$/, "Informe os 4 últimos dígitos")
+    .nullable(),
+  brand: z.string().trim().max(40, "Bandeira muito longa").nullable(),
 });
 
 /**

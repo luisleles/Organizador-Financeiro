@@ -1,6 +1,7 @@
 import { AccountType, CategoryKind, TransactionType } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { toCents } from "../src/lib/money";
+import { invoiceScheduleForPurchase } from "../src/server/accounts/account.credit-card";
 
 /**
  * Gerador pseudoaleatório determinístico (mulberry32), para que o seed produza sempre
@@ -164,6 +165,7 @@ async function seedAccounts(userId: string) {
         name: "Nubank",
         institution: "Nubank",
         type: AccountType.CHECKING,
+        class: "ASSET",
         initialBalanceCents: toCents(3200),
         color: "#8A05BE",
         icon: "landmark",
@@ -175,6 +177,7 @@ async function seedAccounts(userId: string) {
         name: "Banco do Brasil",
         institution: "Banco do Brasil",
         type: AccountType.CHECKING,
+        class: "ASSET",
         initialBalanceCents: toCents(3000),
         color: "#F9C80E",
         icon: "landmark",
@@ -186,6 +189,7 @@ async function seedAccounts(userId: string) {
         name: "Poupança Caixa",
         institution: "Caixa Econômica Federal",
         type: AccountType.SAVINGS,
+        class: "ASSET",
         initialBalanceCents: toCents(5000),
         color: "#0070AE",
         icon: "piggy-bank",
@@ -197,12 +201,13 @@ async function seedAccounts(userId: string) {
         name: "Cartão Inter",
         institution: "Banco Inter",
         type: AccountType.CREDIT_CARD,
+        class: "LIABILITY",
         initialBalanceCents: 0,
         color: "#FF7A00",
         icon: "credit-card",
-        closingDay: 20,
-        dueDay: 28,
-        creditLimitCents: toCents(6000),
+        creditCardDetails: {
+          create: { closingDay: 20, dueDay: 28, creditLimitCents: toCents(6000) },
+        },
       },
     }),
   ]);
@@ -566,6 +571,37 @@ async function seedTransactions(context: SeedContext) {
   return months;
 }
 
+async function allocateSeedCardTransactions(accountId: string) {
+  const details = await prisma.creditCardDetails.findUniqueOrThrow({ where: { accountId } });
+  const transactions = await prisma.transaction.findMany({
+    where: { accountId, invoiceId: null },
+    select: { id: true, date: true },
+  });
+
+  for (const transaction of transactions) {
+    const schedule = invoiceScheduleForPurchase(
+      transaction.date,
+      details.closingDay,
+      details.dueDay,
+    );
+    const invoice = await prisma.invoice.upsert({
+      where: {
+        creditCardDetailsId_referenceMonth: {
+          creditCardDetailsId: details.id,
+          referenceMonth: schedule.referenceMonth,
+        },
+      },
+      create: { creditCardDetailsId: details.id, ...schedule, status: "OPEN" },
+      update: {},
+      select: { id: true },
+    });
+    await prisma.transaction.update({
+      where: { id: transaction.id },
+      data: { invoiceId: invoice.id },
+    });
+  }
+}
+
 async function seedBudgets(context: SeedContext, currentMonth: MonthWindow) {
   const month = utcDate(currentMonth.year, currentMonth.monthIndex, 1, 0);
 
@@ -668,6 +704,7 @@ async function main() {
 
   const context: SeedContext = { userId: user.id, accounts, categoryIdByName, tags };
   const months = await seedTransactions(context);
+  await allocateSeedCardTransactions(accounts.cartaoInter.id);
 
   const currentMonth = months[months.length - 1];
   await seedBudgets(context, currentMonth);

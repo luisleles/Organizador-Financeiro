@@ -2,13 +2,23 @@ import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableCell, TableGroupRow, TableHeadCell } from "@/components/ui/table";
 import { formatDate } from "@/lib/date";
-import type { InvoiceStatus } from "@/server/accounts/account.credit-card";
+import type { InvoiceStatus } from "@prisma/client";
 import type { AccountInvoice } from "@/server/accounts/account.types";
 
 const STATUS_TONE: Record<InvoiceStatus, "saida" | "neutro" | "previsto"> = {
-  aberta: "saida",
-  fechada: "neutro",
-  futura: "previsto",
+  OPEN: "saida",
+  CLOSED: "neutro",
+  PAID: "neutro",
+  PARTIALLY_PAID: "previsto",
+  OVERDUE: "saida",
+};
+
+const STATUS_LABEL: Record<InvoiceStatus, string> = {
+  OPEN: "aberta",
+  CLOSED: "fechada",
+  PAID: "paga",
+  PARTIALLY_PAID: "parcialmente paga",
+  OVERDUE: "atrasada",
 };
 
 type InvoiceStatementProps = {
@@ -33,7 +43,7 @@ export function InvoiceStatement({ invoices, accountName, valuesHidden }: Invoic
         </tr>
       </thead>
       {invoices.map((invoice) => (
-        <tbody key={invoice.key}>
+        <tbody key={invoice.id}>
           <TableGroupRow
             columnSpan={3}
             label={
@@ -42,7 +52,7 @@ export function InvoiceStatement({ invoices, accountName, valuesHidden }: Invoic
                 <span className="text-texto-fraco font-normal normal-case">
                   vence {formatDate(invoice.dueDate)}
                 </span>
-                <Badge tone={STATUS_TONE[invoice.status]}>{invoice.status}</Badge>
+                <Badge tone={STATUS_TONE[invoice.status]}>{STATUS_LABEL[invoice.status]}</Badge>
               </span>
             }
             total={<Amount cents={invoice.totalCents} size="sm" masked={valuesHidden} />}

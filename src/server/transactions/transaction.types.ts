@@ -20,6 +20,10 @@ export type TransactionRow = {
   categoryName: string | null;
   tags: TagRef[];
   transferGroupId: string | null;
+  invoiceId: string | null;
+  installmentGroupId: string | null;
+  installmentNumber: number | null;
+  installmentTotal: number | null;
   notes: string | null;
 };
 
@@ -33,7 +37,14 @@ export type TransactionListing = {
 };
 
 export type FilterOptions = {
-  accounts: { id: string; name: string; color: string }[];
+  accounts: {
+    id: string;
+    name: string;
+    color: string;
+    type: "CHECKING" | "SAVINGS" | "CREDIT_CARD" | "INVESTMENT" | "CASH";
+    class: "ASSET" | "LIABILITY";
+  }[];
+  transferAccounts: { id: string; name: string; color: string }[];
   categories: { id: string; name: string; kind: "INCOME" | "EXPENSE" }[];
   tags: TagRef[];
 };

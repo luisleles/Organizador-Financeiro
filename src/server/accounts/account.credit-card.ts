@@ -24,6 +24,12 @@ export type CreditCardCycle = {
   daysUntilClosing: number;
 };
 
+export type InvoiceSchedule = {
+  referenceMonth: Date;
+  closingDate: Date;
+  dueDate: Date;
+};
+
 export function creditCardPosition(
   balanceCents: number,
   creditLimitCents: number,
@@ -64,6 +70,69 @@ export function creditCardCycle(
   };
 }
 
+/** Datas persistidas de uma fatura, a partir do mês de referência no calendário local. */
+export function invoiceScheduleForReference(
+  referenceMonth: DateParts,
+  closingDay: number,
+  dueDay: number,
+): InvoiceSchedule {
+  const month = { ...referenceMonth, day: 1 };
+  const dueMonth = dueDay > closingDay ? month : addMonths(month, 1);
+
+  return {
+    referenceMonth: fromZonedParts(month),
+    closingDate: fromZonedParts(clampToMonth(month, closingDay)),
+    dueDate: fromZonedParts(clampToMonth(dueMonth, dueDay)),
+  };
+}
+
+/** Primeira fatura cujo fechamento inclui a data da compra. */
+export function invoiceScheduleForPurchase(
+  purchaseDate: Date,
+  closingDay: number,
+  dueDay: number,
+): InvoiceSchedule {
+  const purchase = toDateParts(purchaseDate);
+  const month = { ...purchase, day: 1 };
+  const closing = clampToMonth(month, closingDay);
+  const referenceMonth = purchase.day <= closing.day ? month : addMonths(month, 1);
+  return invoiceScheduleForReference(referenceMonth, closingDay, dueDay);
+}
+
+export function shiftInvoiceSchedule(
+  schedule: InvoiceSchedule,
+  months: number,
+  closingDay: number,
+  dueDay: number,
+): InvoiceSchedule {
+  return invoiceScheduleForReference(
+    addMonths(toDateParts(schedule.referenceMonth), months),
+    closingDay,
+    dueDay,
+  );
+}
+
+/** Divide um total inteiro sem perder centavos; o resto fica nas primeiras parcelas. */
+export function splitInstallmentCents(totalCents: number, installments: number): number[] {
+  if (!Number.isInteger(totalCents) || totalCents <= 0) {
+    throw new RangeError("O total parcelado deve ser um inteiro positivo em centavos.");
+  }
+  if (!Number.isInteger(installments) || installments < 1) {
+    throw new RangeError("A quantidade de parcelas deve ser um inteiro positivo.");
+  }
+
+  const base = Math.floor(totalCents / installments);
+  const remainder = totalCents % installments;
+  return Array.from({ length: installments }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
+/** Mantém o dia da compra nas parcelas seguintes, encaixando-o em meses curtos. */
+export function shiftPurchaseDate(purchaseDate: Date, months: number): Date {
+  const parts = toDateParts(purchaseDate);
+  const target = addMonths({ ...parts, day: 1 }, months);
+  return fromZonedParts(clampToMonth(target, parts.day));
+}
+
 /**
  * Em que fatura um lançamento cai: a primeira que fecha na data dele ou depois. Compra do
  * dia 25 com fechamento no dia 20 entra na fatura do mês seguinte, que é o que o extrato
@@ -75,7 +144,8 @@ function cycleFor(
   dueDay: number,
 ): { closing: DateParts; due: DateParts } {
   const firstOfMonth = { ...date, day: 1 };
-  const closingMonth = date.day <= closingDay ? firstOfMonth : addMonths(firstOfMonth, 1);
+  const closingThisMonth = clampToMonth(firstOfMonth, closingDay);
+  const closingMonth = date.day <= closingThisMonth.day ? firstOfMonth : addMonths(firstOfMonth, 1);
   const dueMonth = dueDay > closingDay ? closingMonth : addMonths(closingMonth, 1);
 
   return {

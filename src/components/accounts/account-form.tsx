@@ -39,6 +39,8 @@ export function AccountForm({ action, account, onSuccess, onCancel }: AccountFor
     creditLimitCents: account?.creditCard
       ? formatCentsForInput(account.creditCard.creditLimitCents)
       : "",
+    lastFourDigits: account?.creditCard?.lastFourDigits ?? "",
+    brand: account?.creditCard?.brand ?? "",
   };
 
   const valueOf = (field: keyof typeof initial) => submitted?.[field] ?? initial[field];
@@ -105,10 +107,12 @@ export function AccountForm({ action, account, onSuccess, onCancel }: AccountFor
         </Field>
 
         <Field
-          label="Saldo inicial"
+          label={isCreditCard ? "Crédito inicial" : "Saldo inicial"}
           htmlFor={id("initialBalanceCents")}
           error={errorFor("initialBalanceCents")}
-          hint={account ? undefined : "O saldo do dia em que você começa a registrar."}
+          hint={
+            account || isCreditCard ? undefined : "O saldo do dia em que você começa a registrar."
+          }
         >
           <Input
             id={id("initialBalanceCents")}
@@ -177,6 +181,32 @@ export function AccountForm({ action, account, onSuccess, onCancel }: AccountFor
               inputMode="decimal"
               defaultValue={valueOf("creditLimitCents")}
               invalid={Boolean(errorFor("creditLimitCents"))}
+            />
+          </Field>
+
+          <Field label="Bandeira" htmlFor={id("brand")} error={errorFor("brand")}>
+            <Input
+              id={id("brand")}
+              name="brand"
+              defaultValue={valueOf("brand")}
+              placeholder="Visa, Mastercard…"
+              invalid={Boolean(errorFor("brand"))}
+            />
+          </Field>
+
+          <Field
+            label="4 últimos dígitos"
+            htmlFor={id("lastFourDigits")}
+            error={errorFor("lastFourDigits")}
+          >
+            <Input
+              id={id("lastFourDigits")}
+              name="lastFourDigits"
+              inputMode="numeric"
+              maxLength={4}
+              defaultValue={valueOf("lastFourDigits")}
+              placeholder="1234"
+              invalid={Boolean(errorFor("lastFourDigits"))}
             />
           </Field>
         </fieldset>

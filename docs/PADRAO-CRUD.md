@@ -28,8 +28,8 @@ dos campos do domínio, então os caminhos de erro do Zod caem direto no `name` 
 sem tabela de tradução.
 
 Regra que não expressa em Prisma vive na camada de serviço ou no schema Zod — por
-exemplo, "dia de fechamento é obrigatório só quando o tipo é `CREDIT_CARD`", que está no
-`superRefine` de `account.schema.ts`.
+exemplo, os termos obrigatórios de `CreditCardDetails` quando o tipo é `CREDIT_CARD`, que
+está no `superRefine` de `account.schema.ts`.
 
 ## Testes
 
@@ -118,3 +118,56 @@ Provar que as duas pernas mudam juntas exige uma transação de banco real, não
 `vitest.global-setup.mts` cria um SQLite descartável em `data/test.db` e roda
 `prisma migrate deploy`; `vitest.setup.mts` aponta a `DATABASE_URL` para ele antes de
 qualquer import do PrismaClient. Como o banco é um só, `fileParallelism` fica desligado.
+
+## Categorias e etiquetas
+
+### Hierarquia e reordenação
+
+A hierarquia tem um nível: categoria e subcategoria, nunca uma terceira camada. A regra
+não cabe no schema do Prisma, então vive em `category.tree.ts` — junto com o cálculo de
+reordenação. `planCategoryMove` recebe a lista achatada e devolve **só as posições que
+precisam ser gravadas**, inclusive a renumeração do grupo de origem quando um item muda
+de pai; quem persiste é o serviço, numa transação só.
+
+Arrastar é o caminho do mouse. As setas de cada linha (`↑ ↓ → ←`) são o mesmo comando
+pelo teclado e chamam a mesma Server Action — uma árvore que só reordena por arrasto é
+inacessível.
+
+### Arquivar oferece realocação
+
+Arquivar uma categoria com histórico pergunta para onde os lançamentos vão. Deixar tudo
+sem categoria é uma escolha explícita, não o padrão silencioso. Arquivar um pai leva as
+subcategorias junto (subcategoria órfã não aparece em lugar nenhum) e desliga as regras
+que apontavam para elas.
+
+### Regras de categorização
+
+`resolveCategoryForDescription` é o ponto de entrada único: o lançamento manual chama ela
+hoje, dentro da mesma transação de banco da criação, e o import de extrato vai chamar a
+mesma função. A regra **só preenche o que ficou em branco** — escolha manual sempre vence.
+O casamento ignora acento e caixa; empatando a prioridade, ganha o padrão mais longo,
+porque "uber eats" é mais específico que "uber".
+
+## Armadilha 3: `loading.tsx` pode travar a página inteira
+
+Sintoma: a página renderiza certa no servidor, mas **nada responde a clique**. O shell
+funciona (menu, tema, seletor de período) e só o conteúdo fica morto. Nenhum erro no
+console, nem em desenvolvimento nem em produção.
+
+A causa é o boundary de Suspense que o `loading.tsx` cria em volta da página: ele fica
+pendente para sempre, e o conteúdo real nunca é entregue ao React para hidratar. O
+diagnóstico direto é procurar o marcador de Suspense pendente no HTML servido:
+
+```bash
+curl -s http://localhost:3000/contas | grep -c '<!--\$?-->'
+```
+
+Se aparecer dentro do `<main>`, o boundary não resolveu. Vale conferir também quantos
+elementos foram hidratados (`Armadilha 2` tem o snippet) — com o boundary preso, o número
+fica travado na contagem do shell.
+
+Não substitua o fallback esperando resolver: aqui o boundary ficou pendente até com um
+`<div>Carregando…</div>` no lugar do esqueleto. A saída foi remover o `(app)/loading.tsx`.
+As consultas são locais e levam milissegundos, então o esqueleto de rota não valia o
+risco. O componente `LoadingState` continua no design system para uso pontual dentro das
+telas.

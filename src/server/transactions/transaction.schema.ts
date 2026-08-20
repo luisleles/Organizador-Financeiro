@@ -28,6 +28,8 @@ export const transactionInputSchema = z.object({
   categoryId: z.string().nullable(),
   tagIds: z.array(z.string().min(1)),
   notes,
+  installments: z.number().int().min(1).max(60).optional(),
+  installmentScope: z.enum(["SINGLE", "FUTURE"]).optional(),
 });
 
 export type TransactionInput = z.infer<typeof transactionInputSchema>;

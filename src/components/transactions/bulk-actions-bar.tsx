@@ -146,6 +146,10 @@ function DeleteButton({ ids, onDone }: { ids: readonly string[]; onDone: () => v
         footer={
           <form action={submit} className="flex gap-2">
             <HiddenIds ids={ids} />
+            <Select name="installmentScope" aria-label="Escopo das parcelas" defaultValue="SINGLE">
+              <option value="SINGLE">Só estas</option>
+              <option value="FUTURE">Estas e futuras</option>
+            </Select>
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
               Cancelar
             </Button>

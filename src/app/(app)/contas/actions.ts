@@ -19,6 +19,8 @@ import {
 } from "@/server/accounts/account.service";
 import { accountIdSchema, accountInputSchema } from "@/server/accounts/account.schema";
 import { writeValuesHidden } from "@/server/preferences";
+import { fromZonedParts } from "@/lib/date";
+import { TransactionServiceError, payInvoice } from "@/server/transactions/transaction.service";
 
 const brlToCents = z
   .string()
@@ -51,6 +53,11 @@ const optionalDay = z
   .trim()
   .transform((value) => (value === "" ? null : Number(value)));
 
+const optionalText = z
+  .string()
+  .trim()
+  .transform((value) => value || null);
+
 /**
  * Os campos do formulário têm o mesmo nome dos campos do domínio de propósito: assim os
  * caminhos de erro do Zod caem direto no `name` do input, sem tabela de tradução.
@@ -66,6 +73,8 @@ const accountFormSchema = z
     closingDay: optionalDay,
     dueDay: optionalDay,
     creditLimitCents: optionalBrlToCents,
+    lastFourDigits: optionalText,
+    brand: optionalText,
   })
   .pipe(accountInputSchema);
 
@@ -150,7 +159,39 @@ export async function deleteAccountAction(
 
 export async function toggleValuesHiddenAction(formData: FormData): Promise<void> {
   await writeValuesHidden(formData.get("hidden") === "1");
-  revalidatePath("/contas");
+  revalidatePath("/contas", "layout");
+}
+
+export async function payInvoiceAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const invoiceId = readText(formData, "invoiceId");
+  const fromAccountId = readText(formData, "fromAccountId");
+  const dateText = readText(formData, "date");
+  const parsedAmount = brlToCents.safeParse(readText(formData, "amountCents"));
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText);
+  if (!invoiceId || !fromAccountId || !dateMatch || !parsedAmount.success) {
+    return actionError("Revise os dados do pagamento.");
+  }
+
+  try {
+    await payInvoice(
+      invoiceId,
+      fromAccountId,
+      Math.abs(parsedAmount.data),
+      fromZonedParts({
+        year: Number(dateMatch[1]),
+        month: Number(dateMatch[2]),
+        day: Number(dateMatch[3]),
+      }),
+    );
+  } catch (error) {
+    return toActionError(error);
+  }
+
+  revalidatePath("/contas", "layout");
+  return actionSuccess("Pagamento registrado.");
 }
 
 function readAccountForm(formData: FormData) {
@@ -164,6 +205,8 @@ function readAccountForm(formData: FormData) {
     closingDay: readText(formData, "closingDay"),
     dueDay: readText(formData, "dueDay"),
     creditLimitCents: readText(formData, "creditLimitCents"),
+    lastFourDigits: readText(formData, "lastFourDigits"),
+    brand: readText(formData, "brand"),
   };
 }
 
@@ -179,6 +222,7 @@ function invalidForm(error: z.ZodError, values: Record<string, string>): ActionS
 
 function toActionError(error: unknown): ActionState {
   if (error instanceof AccountServiceError) return actionError(error.message);
+  if (error instanceof TransactionServiceError) return actionError(error.message);
   throw error;
 }
 

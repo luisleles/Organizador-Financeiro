@@ -29,13 +29,13 @@ quando a fase de autenticação for implementada. `email` é `@unique`.
 ### Account
 
 Uma conta bancária, carteira ou cartão de crédito. `type` distingue
-`CHECKING | SAVINGS | CREDIT_CARD | INVESTMENT | CASH`. Dois pontos de design:
+`CHECKING | SAVINGS | CREDIT_CARD | INVESTMENT | CASH`, enquanto `class` define o lado
+contábil: todos os tipos, exceto cartão, são `ASSET`; cartão é `LIABILITY`.
 
 - `institution` é opcional: uma carteira (`CASH`) não tem banco associado.
-- `closingDay`, `dueDay` e `creditLimitCents` só fazem sentido para `CREDIT_CARD` e por
-  isso são opcionais — o Prisma/SQLite não tem uma forma nativa de "campos obrigatórios
-  condicionais a um enum", então essa regra (preencher os três quando `type =
-CREDIT_CARD`) é validada na camada de serviço (`src/server`), não no schema.
+- Os termos do cartão não ficam em `Account`: `CreditCardDetails` guarda fechamento,
+  vencimento, limite, bandeira e quatro últimos dígitos numa relação 1:1. O serviço
+  cria `Account` e `CreditCardDetails` na mesma transação de banco.
 
 Deletar uma conta (`onDelete: Cascade` a partir de `User`, e as relações de `Account`
 para `Transaction`/`RecurringRule` também em cascade) apaga o histórico associado. Como
@@ -81,20 +81,29 @@ WHEN type = ...` nas queries.
   ambas ordenadas por data.
 - `installmentGroupId`, `installmentNumber` e `installmentTotal` guardam parcelamento de
   cartão: as parcelas de uma mesma compra compartilham o grupo, e cada linha sabe que é a
-  `n` de `total`. Por enquanto só os campos existem — a geração das parcelas ainda não
-  foi implementada, e nada no app os preenche.
+  `n` de `total`. A divisão é feita em centavos inteiros e o resto vai para as primeiras
+  parcelas.
+- `invoiceId` é obrigatório para qualquer linha do ledger de um cartão e nulo para
+  contas `ASSET`. Essa invariante é validada em toda escrita do serviço.
 
 ### Cartão de crédito
 
-O saldo de um cartão é a fatura em aberto, e nasce negativo: cada compra é uma linha com
-`amountCents` negativo, e o pagamento da fatura é uma **transferência** da conta corrente
-para o cartão, ou seja, duas linhas que se anulam. Três consequências, todas cobertas por
-teste em `src/server/accounts/account.credit-card.test.ts`:
+`Invoice` persiste o mês de referência, fechamento, vencimento e estado de cada fatura.
+A compra continua sendo uma linha negativa no ledger do cartão, mas agora aponta para a
+fatura que a cobra. O dia exato do fechamento ainda pertence ao mês corrente; o dia
+seguinte vai para o próximo, com dias 29–31 encaixados no fim de meses curtos.
 
-- **A fatura é `min(saldo, 0)`.** Quem paga a mais fica com saldo positivo no cartão; isso
-  é crédito a favor, não fatura negativa.
+O pagamento é um fluxo separado: cria uma perna negativa na conta de ativo e outra
+positiva no cartão, ambas `TRANSFER`, sendo que apenas a perna do cartão recebe
+`invoiceId`. Cartões não participam da transferência comum nem como origem nem como
+destino.
+
+Consequências cobertas pelos testes de serviço:
+
 - **O limite disponível nunca entra no patrimônio.** Limite é crédito de terceiro. Dobrar
   o limite do cartão não muda um centavo do saldo consolidado.
+- **O limite considera todas as faturas não pagas.** Uma compra parcelada compromete o
+  total no momento da compra, inclusive as parcelas futuras.
 - **Pagar a fatura não muda o saldo líquido.** O ativo cai e a dívida cai no mesmo valor;
   o que muda é a composição. Se o líquido subisse ou descesse ao pagar uma fatura, seria
   sinal de que o pagamento virou despesa nova ou perdeu a perna de saída.
@@ -103,15 +112,9 @@ O consolidado é apresentado em três blocos — saldo em contas, faturas em abe
 líquido — porque um total único esconde exatamente a informação que faz alguém se
 enganar sobre quanto tem.
 
-O extrato de cartão é agrupado por fatura, e não por dia: um lançamento cai na primeira
-fatura que fecha na data dele ou depois. Compra do dia 25 com fechamento no dia 20 entra
-na fatura do mês seguinte — inclusive o pagamento da fatura anterior, que é o que os
-extratos de cartão de verdade mostram. Cada grupo é marcado como `fechada`, `aberta` ou
-`futura` conforme o ciclo de hoje.
-
-Por isso o extrato de cartão é buscado por **intervalo de datas**, e não pelas N últimas
-linhas: cortar por quantidade deixaria a fatura mais antiga pela metade, com um total que
-não corresponde a nada.
+As faturas são criadas sob demanda. Uma fatura `PAID` ou `CLOSED` não recebe lançamento
+novo; a alocação avança até a próxima fatura aberta. A chave única
+`(creditCardDetailsId, referenceMonth)` impede ciclos duplicados.
 
 ### Por que transferência usa duas linhas
 
@@ -182,5 +185,4 @@ Modelo usado a partir da fase 10, quando lançamentos recorrentes passam a gerar
 `prisma/seed.ts` gera dados fictícios (nenhum dado pessoal real) com um gerador
 pseudoaleatório de semente fixa, então rodar `npm run db:seed` duas vezes produz sempre
 o mesmo resultado: 4 contas, 22 categorias, 3 tags, ~250–280 transações nos últimos 8
-meses (incluindo 12 transferências — pagamento de fatura, reposição entre contas
-correntes e aportes em poupança), 3 orçamentos e 2 metas com contribuições.
+meses, faturas de cartão alocadas, 3 orçamentos e 2 metas com contribuições.

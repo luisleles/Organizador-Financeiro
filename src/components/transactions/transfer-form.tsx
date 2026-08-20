@@ -78,7 +78,7 @@ export function TransferForm({
             name="fromAccountId"
             defaultValue={valueOf("fromAccountId")}
           >
-            {options.accounts.map((account) => (
+            {options.transferAccounts.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.name}
               </option>
@@ -94,7 +94,7 @@ export function TransferForm({
             defaultValue={valueOf("toAccountId")}
             invalid={Boolean(errorFor("toAccountId"))}
           >
-            {options.accounts.map((account) => (
+            {options.transferAccounts.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.name}
               </option>

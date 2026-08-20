@@ -14,6 +14,16 @@ const compat = new FlatCompat({
 const eslintConfig = defineConfig([
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   prettierConfig,
+  {
+    rules: {
+      // Server Action recebe (state, formData) por contrato do `useActionState`, mesmo
+      // quando não usa os dois. O underscore marca o parâmetro como deliberadamente ocioso.
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+    },
+  },
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
 ]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useId, useRef } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ export type TransactionDefaults = {
   categoryId: string;
   tagIds: string[];
   notes: string;
+  installments: string;
+  installmentScope: string;
 };
 
 type TransactionFormProps = {
@@ -46,6 +48,7 @@ export function TransactionForm({
   const formRef = useRef<HTMLFormElement>(null);
   const categoryRef = useRef<HTMLSelectElement>(null);
   const descriptionRef = useRef<HTMLInputElement>(null);
+  const [accountId, setAccountId] = useState(valueOfInitial("accountId"));
 
   /**
    * `showModal()` do <dialog> move o foco para o primeiro elemento focável assim que abre,
@@ -58,8 +61,17 @@ export function TransactionForm({
   }, []);
 
   const submitted = state.status === "error" ? state.values : undefined;
+  function valueOfInitial(field: keyof TransactionDefaults): string {
+    return (
+      (state.status === "error" ? state.values?.[field] : undefined) ?? (defaults[field] as string)
+    );
+  }
+
   const valueOf = (field: keyof TransactionDefaults) =>
     submitted?.[field] ?? (defaults[field] as string);
+
+  const isCreditCard =
+    options.accounts.find((account) => account.id === accountId)?.type === "CREDIT_CARD";
 
   useEffect(() => {
     if (state.status !== "success") return;
@@ -75,6 +87,8 @@ export function TransactionForm({
       categoryId: "",
       tagIds: [],
       notes: "",
+      installments: "1",
+      installmentScope: "SINGLE",
     });
   }, [state, onSaved, defaults]);
 
@@ -170,6 +184,7 @@ export function TransactionForm({
             id={id("accountId")}
             name="accountId"
             defaultValue={valueOf("accountId")}
+            onChange={(event) => setAccountId(event.target.value)}
           >
             {options.accounts.map((account) => (
               <option key={account.id} value={account.id}>
@@ -196,6 +211,44 @@ export function TransactionForm({
           </Select>
         </Field>
       </div>
+
+      {isCreditCard && !transactionId && (
+        <Field label="Parcelas" htmlFor={id("installments")} error={errorFor("installments")}>
+          <Input
+            id={id("installments")}
+            name="installments"
+            type="number"
+            min={1}
+            max={60}
+            numeric
+            defaultValue={valueOf("installments")}
+            invalid={Boolean(errorFor("installments"))}
+          />
+        </Field>
+      )}
+
+      {(!isCreditCard || transactionId) && <input type="hidden" name="installments" value="1" />}
+
+      {transactionId && defaults.installmentScope && (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="text-2xs text-texto-fraco font-semibold uppercase">
+            Aplicar alteração
+          </legend>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="radio" name="installmentScope" value="SINGLE" defaultChecked />
+            Somente nesta parcela
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="radio" name="installmentScope" value="FUTURE" />
+            Nesta e em todas as futuras
+          </label>
+        </fieldset>
+      )}
+
+      {!transactionId && <input type="hidden" name="installmentScope" value="SINGLE" />}
+      {transactionId && !defaults.installmentScope && (
+        <input type="hidden" name="installmentScope" value="SINGLE" />
+      )}
 
       {options.tags.length > 0 && (
         <fieldset className="flex flex-col gap-1.5">

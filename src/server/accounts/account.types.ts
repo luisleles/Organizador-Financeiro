@@ -1,12 +1,15 @@
-import type { AccountType } from "@prisma/client";
+import type { AccountClass, AccountType, InvoiceStatus } from "@prisma/client";
 import type { BalancePoint, ConsolidatedBalance } from "./account.balance";
-import type { CreditCardCycle, CreditCardPosition, InvoiceGroup } from "./account.credit-card";
+import type { CreditCardCycle, CreditCardPosition } from "./account.credit-card";
 
 /** Termos cadastrados do cartão, presentes só quando `type` é `CREDIT_CARD`. */
 export type CreditCardTerms = {
+  detailsId: string;
   closingDay: number;
   dueDay: number;
   creditLimitCents: number;
+  lastFourDigits: string | null;
+  brand: string | null;
 };
 
 /** Termos mais a posição calculada: fatura, limite disponível, uso e datas do ciclo. */
@@ -17,6 +20,7 @@ export type AccountSummary = {
   name: string;
   institution: string | null;
   type: AccountType;
+  class: AccountClass;
   color: string;
   icon: string;
   archived: boolean;
@@ -43,9 +47,21 @@ export type AccountEntry = {
   amountCents: number;
   categoryName: string | null;
   isTransfer: boolean;
+  installmentNumber: number | null;
+  installmentTotal: number | null;
 };
 
-export type AccountInvoice = InvoiceGroup<AccountEntry>;
+export type AccountInvoice = {
+  id: string;
+  referenceMonth: Date;
+  closingDate: Date;
+  dueDate: Date;
+  status: InvoiceStatus;
+  paidAt: Date | null;
+  paymentTransferGroupId: string | null;
+  totalCents: number;
+  entries: AccountEntry[];
+};
 
 export type AccountDetail = {
   account: AccountSummary;
