@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "abrir": "bash scripts/abrir-app.sh",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "next typegen && tsc --noEmit",

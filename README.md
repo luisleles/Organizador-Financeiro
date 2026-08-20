@@ -24,6 +24,28 @@ src/server     camada de serviço e regras de negócio
 prisma         schema, migrations e seed
 ```
 
+## Abrindo com um clique (Linux)
+
+`scripts/abrir-app.sh` faz tudo sozinho: instala dependências se faltarem, aplica as
+migrations, gera os dados de exemplo num banco novo, compila só quando algum arquivo
+mudou desde a última build, sobe o servidor e abre o navegador. Se o app já estiver no ar,
+ele apenas abre a aba.
+
+Para ter o ícone de clicar, copie o atalho e ajuste o caminho do projeto:
+
+```bash
+sed "s|__PROJETO__|$PWD|" scripts/controle-financeiro.desktop \
+  > ~/.local/share/applications/controle-financeiro.desktop
+sed "s|__PROJETO__|$PWD|" scripts/controle-financeiro.desktop \
+  > ~/Desktop/"Controle Financeiro.desktop"
+chmod +x ~/Desktop/"Controle Financeiro.desktop"
+```
+
+O atalho na área de trabalho pede uma autorização única do GNOME: clique com o botão
+direito e escolha "Permitir execução". Pelo menu de aplicativos ele abre direto.
+
+Fechar a janela de terminal encerra o app.
+
 ## Rodando com Docker
 
 Pré-requisitos: Docker e Docker Compose.
@@ -78,6 +100,7 @@ A aplicação sobe em [http://localhost:3000](http://localhost:3000).
 | `npm run db:migrate` | Aplica migrations do Prisma em desenvolvimento    |
 | `npm run db:seed`    | Popula o banco com dados iniciais                 |
 | `npm run db:studio`  | Abre o Prisma Studio para inspecionar o banco     |
+| `npm run abrir`      | Sobe o app pronto para uso e abre no navegador    |
 
 ## Banco de dados
 

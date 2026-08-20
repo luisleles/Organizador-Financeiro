@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Controle Financeiro
+Comment=Sobe o app e abre no navegador
+Exec=bash "__PROJETO__/scripts/abrir-app.sh"
+Icon=accessories-calculator
+Terminal=true
+Categories=Office;Finance;
