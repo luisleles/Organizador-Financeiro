@@ -5,5 +5,10 @@ Name=Controle Financeiro
 Comment=Sobe o app e abre no navegador
 Exec=bash "__PROJETO__/scripts/abrir-app.sh"
 Icon=accessories-calculator
-Terminal=true
+Terminal=false
 Categories=Office;Finance;
+Actions=Fechar;
+
+[Desktop Action Fechar]
+Name=Fechar o app
+Exec=bash "__PROJETO__/scripts/fechar-app.sh"

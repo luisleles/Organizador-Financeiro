@@ -29,9 +29,13 @@ prisma         schema, migrations e seed
 `scripts/abrir-app.sh` faz tudo sozinho: instala dependências se faltarem, aplica as
 migrations, gera os dados de exemplo num banco novo, compila só quando algum arquivo
 mudou desde a última build, sobe o servidor e abre o navegador. Se o app já estiver no ar,
-ele apenas abre a aba.
+ele apenas abre a aba. O atalho roda sem terminal, então o andamento aparece nas
+notificações do sistema e o registro completo fica em `data/abrir-app.log`.
 
-Para ter o ícone de clicar, copie o atalho e ajuste o caminho do projeto:
+`scripts/fechar-app.sh` encerra o servidor — ele também é a ação "Fechar o app" no menu de
+contexto do atalho.
+
+Para instalar o atalho, com o caminho do projeto já preenchido:
 
 ```bash
 sed "s|__PROJETO__|$PWD|" scripts/controle-financeiro.desktop \
@@ -41,10 +45,8 @@ sed "s|__PROJETO__|$PWD|" scripts/controle-financeiro.desktop \
 chmod +x ~/Desktop/"Controle Financeiro.desktop"
 ```
 
-O atalho na área de trabalho pede uma autorização única do GNOME: clique com o botão
-direito e escolha "Permitir execução". Pelo menu de aplicativos ele abre direto.
-
-Fechar a janela de terminal encerra o app.
+Pelo menu de aplicativos ele abre direto. Na área de trabalho, o GNOME exige uma
+autorização única: botão direito no ícone, "Permitir execução".
 
 ## Rodando com Docker
 

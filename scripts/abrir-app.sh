@@ -1,68 +1,92 @@
 #!/usr/bin/env bash
-# Abre o Controle Financeiro com um clique: prepara o que faltar, sobe o servidor e
-# abre o navegador. Fechar esta janela encerra o app.
-set -euo pipefail
+# Abre o Controle Financeiro: prepara o que faltar, sobe o servidor e abre o navegador.
+# Funciona tanto no terminal quanto pelo atalho da área de trabalho, que não tem terminal
+# nenhum — nesse caso o aviso vai para as notificações do sistema.
+set -uo pipefail
 
 PROJETO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$PROJETO"
 PORTA="${PORT:-3000}"
 URL="http://localhost:$PORTA"
-cd "$PROJETO"
+REGISTRO="$PROJETO/data/abrir-app.log"
+mkdir -p data
+: > "$REGISTRO"
 
-titulo() { printf '\n\033[1m%s\033[0m\n' "$1"; }
+aviso() {
+  printf '\n\033[1m%s\033[0m\n' "$1" | tee -a "$REGISTRO"
+  [ -t 1 ] || notify-send -a "Controle Financeiro" "Controle Financeiro" "$1" >/dev/null 2>&1 || true
+}
+
 erro() {
-  printf '\n\033[31m%s\033[0m\n\n' "$1"
-  read -r -p "Pressione Enter para fechar. "
+  printf '\n\033[31m%s\033[0m\n' "$1" | tee -a "$REGISTRO"
+  if [ -t 1 ]; then
+    read -r -p "Pressione Enter para fechar. "
+  else
+    zenity --error --title="Controle Financeiro" --width=420 \
+      --text="$1"$'\n\n'"Detalhes em data/abrir-app.log" >/dev/null 2>&1 || true
+  fi
   exit 1
 }
 
-command -v node >/dev/null || erro "Node.js não está instalado. Instale o Node 20 ou mais novo e tente de novo."
+executar() {
+  local descricao="$1"
+  shift
+  printf '\n$ %s\n' "$*" >> "$REGISTRO"
+  "$@" >> "$REGISTRO" 2>&1 || erro "$descricao"
+}
 
-if ss -ltn "sport = :$PORTA" 2>/dev/null | grep -q LISTEN; then
-  titulo "O app já estava rodando. Abrindo $URL"
-  xdg-open "$URL" >/dev/null 2>&1 || true
+no_ar() { curl -sf -o /dev/null --max-time 2 "$URL"; }
+
+command -v node >/dev/null || erro "O Node.js não está instalado. Instale o Node 20 ou mais novo e tente de novo."
+
+if no_ar; then
+  aviso "O app já estava rodando. Abrindo $URL"
+  xdg-open "$URL" >/dev/null 2>&1 &
   exit 0
 fi
 
 if [ ! -d node_modules ]; then
-  titulo "Primeira vez por aqui: instalando as dependências. Isso demora alguns minutos."
-  npm install || erro "Não deu para instalar as dependências."
+  aviso "Primeira vez por aqui: instalando as dependências. Isso demora alguns minutos."
+  executar "Não deu para instalar as dependências." npm install
 fi
 
 BANCO_NOVO=0
 [ -f data/app.db ] || BANCO_NOVO=1
 
-titulo "Preparando o banco de dados…"
-npx prisma migrate deploy >/dev/null || erro "Não deu para preparar o banco de dados."
+aviso "Preparando o banco de dados…"
+executar "Não deu para preparar o banco de dados." npx prisma migrate deploy
 
 if [ "$BANCO_NOVO" = "1" ]; then
-  titulo "Banco vazio: gerando dados de exemplo…"
-  npm run db:seed >/dev/null || erro "Não deu para gerar os dados de exemplo."
+  aviso "Banco vazio: gerando dados de exemplo…"
+  executar "Não deu para gerar os dados de exemplo." npm run db:seed
 fi
 
-# Só recompila quando algo mudou desde a última build — abrir o app de novo é instantâneo.
+# Só recompila quando algo mudou desde a última build — reabrir o app é questão de segundos.
 precisa_build() {
   [ -f .next/BUILD_ID ] || return 0
-  [ -n "$(find src prisma package.json next.config.ts postcss.config.mjs -newer .next/BUILD_ID 2>/dev/null | head -1)" ]
+  [ -n "$(find src prisma package.json next.config.ts postcss.config.mjs \
+    -newer .next/BUILD_ID 2>/dev/null | head -1)" ]
 }
 
 if precisa_build; then
-  titulo "Compilando a versão de produção. Na primeira vez leva cerca de um minuto…"
-  npm run build || erro "A compilação falhou. Rode 'npm run build' no terminal para ver o erro."
+  aviso "Compilando o app. Na primeira vez leva cerca de um minuto…"
+  executar "A compilação falhou. Rode 'npm run build' no terminal para ver o erro." npm run build
 fi
 
-titulo "Subindo o servidor…"
-npm start &
+npm start >> "$REGISTRO" 2>&1 &
 SERVIDOR=$!
-trap 'kill "$SERVIDOR" 2>/dev/null || true' EXIT
+trap 'kill "$SERVIDOR" 2>/dev/null' EXIT
 
-for _ in $(seq 1 60); do
-  if curl -sf -o /dev/null "$URL"; then
-    xdg-open "$URL" >/dev/null 2>&1 || true
-    break
-  fi
+for _ in $(seq 1 90); do
+  no_ar && break
+  kill -0 "$SERVIDOR" 2>/dev/null || erro "O servidor não subiu. Veja data/abrir-app.log."
   sleep 1
 done
 
-printf '\n\033[1mControle Financeiro rodando em %s\033[0m\n' "$URL"
-printf 'Feche esta janela para encerrar o app.\n\n'
+no_ar || erro "O servidor demorou demais para responder. Veja data/abrir-app.log."
+
+xdg-open "$URL" >/dev/null 2>&1 &
+aviso "Controle Financeiro rodando em $URL"
+[ -t 1 ] && printf 'Feche esta janela para encerrar o app.\n\n'
+
 wait "$SERVIDOR"
