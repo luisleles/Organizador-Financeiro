@@ -1,7 +1,8 @@
-import { AccountType, CategoryKind, TransactionType } from "@prisma/client";
+import { AccountClass, AccountType, CategoryKind, TransactionType } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { toCents } from "../src/lib/money";
 import { invoiceScheduleForPurchase } from "../src/server/accounts/account.credit-card";
+import { YIELD_CATEGORY_NAME } from "../src/server/categories/system-categories";
 
 /**
  * Gerador pseudoaleatório determinístico (mulberry32), para que o seed produza sempre
@@ -80,12 +81,7 @@ const INCOME_CATEGORIES: CategorySeed[] = [
       { name: "Freelance", color: "#22C55E", icon: "laptop" },
     ],
   },
-  {
-    name: "Investimentos",
-    color: "#0D9488",
-    icon: "trending-up",
-    children: [{ name: "Rendimentos", color: "#0D9488", icon: "trending-up" }],
-  },
+  { name: "Investimentos", color: "#0D9488", icon: "trending-up" },
   { name: "Outras receitas", color: "#65A30D", icon: "circle-dollar-sign" },
 ];
 
@@ -635,63 +631,148 @@ async function seedBudgets(context: SeedContext, currentMonth: MonthWindow) {
 
 async function seedGoals(context: SeedContext, currentMonth: MonthWindow) {
   const { userId, accounts } = context;
+  const yieldCategoryId = categoryId(context, YIELD_CATEGORY_NAME);
 
-  const trip = await prisma.goal.create({
-    data: {
-      userId,
-      name: "Viagem para o Nordeste",
-      targetCents: toCents(8000),
-      targetDate: utcDate(currentMonth.year, currentMonth.monthIndex + 6, 1),
-      accountId: accounts.poupancaCaixa.id,
-      color: "#0EA5E9",
-      icon: "plane",
-    },
-  });
-  await prisma.goalContribution.createMany({
-    data: [
-      {
-        goalId: trip.id,
-        date: utcDate(currentMonth.year, currentMonth.monthIndex - 2, 15),
-        amountCents: toCents(1200),
+  /**
+   * Meta agora é caixinha: uma subconta da conta mãe cujo saldo é o progresso. Cada aporte
+   * é uma transferência de duas pernas, e o rendimento é uma entrada só, categorizada como
+   * sistema — dinheiro novo, sem contrapartida.
+   */
+  async function seedBucketGoal(goal: {
+    name: string;
+    targetReais: number;
+    monthsAhead: number;
+    color: string;
+    icon: string;
+    ratePercent: number | null;
+    deposits: { monthOffset: number; day: number; reais: number }[];
+    yields?: { monthOffset: number; reais: number }[];
+  }) {
+    const bucket = await prisma.account.create({
+      data: {
+        userId,
+        name: goal.name,
+        type: AccountType.SAVINGS_BUCKET,
+        class: AccountClass.ASSET,
+        initialBalanceCents: 0,
+        color: goal.color,
+        icon: goal.icon,
+        parentAccountId: accounts.poupancaCaixa.id,
       },
-      {
-        goalId: trip.id,
-        date: utcDate(currentMonth.year, currentMonth.monthIndex - 1, 15),
-        amountCents: toCents(1500),
+    });
+
+    await prisma.goal.create({
+      data: {
+        userId,
+        name: goal.name,
+        targetCents: toCents(goal.targetReais),
+        targetDate: utcDate(currentMonth.year, currentMonth.monthIndex + goal.monthsAhead, 1),
+        color: goal.color,
+        icon: goal.icon,
+        bucketAccountId: bucket.id,
+        expectedYearlyRatePercent: goal.ratePercent,
       },
-      {
-        goalId: trip.id,
-        date: utcDate(currentMonth.year, currentMonth.monthIndex, 15),
-        amountCents: toCents(900),
-      },
+    });
+
+    for (const deposit of goal.deposits) {
+      const date = utcDate(
+        currentMonth.year,
+        currentMonth.monthIndex + deposit.monthOffset,
+        deposit.day,
+      );
+      const transferGroupId = `bucket-${bucket.id}-${deposit.monthOffset}`;
+
+      await prisma.transaction.createMany({
+        data: [
+          {
+            userId,
+            accountId: accounts.poupancaCaixa.id,
+            date,
+            description: `Aporte · ${goal.name}`,
+            amountCents: -toCents(deposit.reais),
+            type: TransactionType.TRANSFER,
+            transferGroupId,
+            provider: "manual",
+          },
+          {
+            userId,
+            accountId: bucket.id,
+            date,
+            description: `Aporte · ${goal.name}`,
+            amountCents: toCents(deposit.reais),
+            type: TransactionType.TRANSFER,
+            transferGroupId,
+            provider: "manual",
+          },
+        ],
+      });
+    }
+
+    for (const entry of goal.yields ?? []) {
+      await prisma.transaction.create({
+        data: {
+          userId,
+          accountId: bucket.id,
+          categoryId: yieldCategoryId,
+          date: utcDate(currentMonth.year, currentMonth.monthIndex + entry.monthOffset, 28),
+          description: `Rendimento · ${goal.name}`,
+          amountCents: toCents(entry.reais),
+          type: TransactionType.INCOME,
+          provider: "manual",
+        },
+      });
+    }
+  }
+
+  await seedBucketGoal({
+    name: "Viagem para o Nordeste",
+    targetReais: 8000,
+    monthsAhead: 6,
+    color: "#0B6E75",
+    icon: "plane",
+    ratePercent: null,
+    deposits: [
+      { monthOffset: -2, day: 15, reais: 1200 },
+      { monthOffset: -1, day: 15, reais: 1500 },
+      { monthOffset: 0, day: 15, reais: 900 },
     ],
   });
 
-  const emergencyFund = await prisma.goal.create({
-    data: {
-      userId,
-      name: "Reserva de emergência",
-      targetCents: toCents(20000),
-      targetDate: utcDate(currentMonth.year, currentMonth.monthIndex + 12, 1),
-      accountId: accounts.poupancaCaixa.id,
-      color: "#059669",
-      icon: "shield",
-    },
-  });
-  await prisma.goalContribution.createMany({
-    data: [
-      {
-        goalId: emergencyFund.id,
-        date: utcDate(currentMonth.year, currentMonth.monthIndex - 1, 20),
-        amountCents: toCents(2000),
-      },
-      {
-        goalId: emergencyFund.id,
-        date: utcDate(currentMonth.year, currentMonth.monthIndex, 20),
-        amountCents: toCents(1800),
-      },
+  await seedBucketGoal({
+    name: "Reserva de emergência",
+    targetReais: 20000,
+    monthsAhead: 12,
+    color: "#2653D9",
+    icon: "piggy-bank",
+    ratePercent: 10.5,
+    deposits: [
+      { monthOffset: -1, day: 20, reais: 2000 },
+      { monthOffset: 0, day: 20, reais: 1800 },
+    ],
+    yields: [
+      { monthOffset: -1, reais: 12.4 },
+      { monthOffset: 0, reais: 27.8 },
     ],
   });
+}
+
+/**
+ * Categorias criadas pelo sistema. Não são editáveis nem excluíveis pela interface, porque
+ * o app depende delas para classificar o que ele mesmo lança.
+ */
+async function seedSystemCategories(userId: string): Promise<string> {
+  const rendimentos = await prisma.category.create({
+    data: {
+      userId,
+      name: YIELD_CATEGORY_NAME,
+      kind: CategoryKind.INCOME,
+      color: "#0B6E75",
+      icon: "chart",
+      isSystem: true,
+    },
+  });
+
+  return rendimentos.id;
 }
 
 async function main() {
@@ -700,6 +781,9 @@ async function main() {
   const user = await seedUser();
   const accounts = await seedAccounts(user.id);
   const categoryIdByName = await seedCategories(user.id);
+  // Rendimento de poupança e de caixinha caem na mesma categoria de sistema: é o que deixa
+  // o painel separar receita ativa de dinheiro que rendeu sozinho.
+  categoryIdByName.set(YIELD_CATEGORY_NAME, await seedSystemCategories(user.id));
   const tags = await seedTags(user.id);
 
   const context: SeedContext = { userId: user.id, accounts, categoryIdByName, tags };

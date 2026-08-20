@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/shell/page-header";
 import { ArchiveGoalButton } from "@/components/goals/archive-goal-button";
-import { ContributionPanel } from "@/components/goals/contribution-panel";
+import { BucketPanel, CreateBucketPanel } from "@/components/goals/bucket-panel";
 import { GoalFormDialog } from "@/components/goals/goal-form-dialog";
 import { GoalMark } from "@/components/goals/goal-icon";
 import { GoalProgressChart } from "@/components/goals/goal-progress-chart";
@@ -20,13 +20,16 @@ import { listAccountBalances } from "@/server/reports/report.service";
 export const dynamic = "force-dynamic";
 
 export default async function MetasPage() {
-  const [{ active, completed, archived }, accounts, valuesHidden] = await Promise.all([
+  const [{ planning, active, completed, archived }, accounts, valuesHidden] = await Promise.all([
     listGoals(),
     listAccountBalances(),
     readValuesHidden(),
   ]);
 
-  const accountOptions = accounts.map((account) => ({ id: account.id, name: account.name }));
+  // Caixinha só pode nascer sob conta de ativo que não seja outra caixinha.
+  const accountOptions = accounts
+    .filter((account) => !account.isCreditCard && !account.isBucket)
+    .map((account) => ({ id: account.id, name: account.name }));
   const today = todayISO();
 
   return (
@@ -37,7 +40,10 @@ export default async function MetasPage() {
         action={<GoalFormDialog accounts={accountOptions} label="Nova meta" variant="primary" />}
       />
 
-      {active.length === 0 && completed.length === 0 && archived.length === 0 ? (
+      {planning.length === 0 &&
+      active.length === 0 &&
+      completed.length === 0 &&
+      archived.length === 0 ? (
         <EmptyState
           title="Nenhuma meta ainda"
           description="Uma meta dá destino para a sobra do mês: um valor, um prazo, e o app calcula o resto."
@@ -51,6 +57,21 @@ export default async function MetasPage() {
             <section className="flex flex-col gap-4">
               <h2 className="text-2xs text-texto-fraco font-semibold uppercase">Concluídas</h2>
               {completed.map((goal) => (
+                <GoalCard
+                  key={goal.id}
+                  goal={goal}
+                  accounts={accountOptions}
+                  today={today}
+                  valuesHidden={valuesHidden}
+                />
+              ))}
+            </section>
+          )}
+
+          {planning.length > 0 && (
+            <section className="flex flex-col gap-4">
+              <h2 className="text-2xs text-texto-fraco font-semibold uppercase">Em planejamento</h2>
+              {planning.map((goal) => (
                 <GoalCard
                   key={goal.id}
                   goal={goal}
@@ -127,8 +148,10 @@ function GoalCard({ goal, accounts, today, valuesHidden }: GoalCardProps) {
           <h3 className="text-texto text-sm font-medium">{goal.name}</h3>
           <p className="text-texto-fraco flex items-center gap-2 text-xs">
             Prazo {formatDate(goal.targetDate)}
-            {goal.useAccountBalance && goal.accountName && (
-              <Badge tone="neutro">saldo de {goal.accountName}</Badge>
+            {goal.bucket ? (
+              <Badge tone="neutro">caixinha em {goal.bucket.parentAccountName}</Badge>
+            ) : (
+              <Badge tone="previsto">sem caixinha</Badge>
             )}
           </p>
         </div>
@@ -168,10 +191,30 @@ function GoalCard({ goal, accounts, today, valuesHidden }: GoalCardProps) {
               showCurrency
               masked={valuesHidden}
             />
+            {goal.bucket && goal.bucket.totalYieldCents > 0 && (
+              <p className="text-texto-fraco text-xs">
+                <Amount
+                  cents={goal.bucket.totalDepositedCents}
+                  size="xs"
+                  tone="neutro"
+                  sign="never"
+                  masked={valuesHidden}
+                />{" "}
+                aportado +{" "}
+                <Amount
+                  cents={goal.bucket.totalYieldCents}
+                  size="xs"
+                  tone="entrada"
+                  sign="never"
+                  masked={valuesHidden}
+                />{" "}
+                de rendimento
+              </p>
+            )}
             <p className="text-texto-fraco text-xs">
               de{" "}
               <Amount
-                cents={pace.targetCents}
+                cents={goal.targetCents}
                 size="xs"
                 tone="neutro"
                 sign="never"
@@ -248,12 +291,11 @@ function GoalCard({ goal, accounts, today, valuesHidden }: GoalCardProps) {
           </p>
         )}
 
-        <ContributionPanel
-          goalId={goal.id}
-          contributions={goal.contributions}
-          today={today}
-          informativeOnly={goal.useAccountBalance}
-        />
+        {goal.bucket ? (
+          <BucketPanel goal={goal} today={today} />
+        ) : (
+          <CreateBucketPanel goalId={goal.id} accounts={accounts} />
+        )}
       </div>
     </section>
   );

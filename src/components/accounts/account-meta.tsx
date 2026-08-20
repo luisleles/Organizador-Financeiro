@@ -7,6 +7,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   CREDIT_CARD: "Cartão de crédito",
   INVESTMENT: "Investimento",
   CASH: "Carteira",
+  SAVINGS_BUCKET: "Caixinha",
 };
 
 export const ACCOUNT_ICON_LABELS: Record<string, string> = {

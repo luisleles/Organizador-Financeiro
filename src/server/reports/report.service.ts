@@ -1,7 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { fromZonedParts, toDateParts } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
+import { YIELD_CATEGORY_NAME } from "@/server/categories/system-categories";
 import type { ResolvedPeriod } from "@/lib/period";
+import { isBucket, splitParentBalance } from "@/server/accounts/account.buckets";
 import { requireUserId } from "@/server/current-user";
 import { monthKey } from "@/server/categories/category.stats";
 import {
@@ -35,6 +37,13 @@ export type AccountBalance = {
   color: string;
   balanceCents: number;
   isCreditCard: boolean;
+  isBucket: boolean;
+  parentAccountId: string | null;
+  /** Saldo livre da conta, sem o dinheiro que está nas caixinhas filhas. */
+  availableBalanceCents: number;
+  /** Disponível mais caixinhas. É este que entra no patrimônio consolidado. */
+  totalBalanceCents: number;
+  buckets: AccountBalance[];
 };
 
 export type TopExpense = {
@@ -57,6 +66,8 @@ export type GoalProgress = {
 
 export type DashboardData = {
   income: Variation;
+  /** Parte da receita que veio de rendimento de caixinha, não de trabalho. */
+  yieldCents: number;
   expense: Variation;
   netCents: number;
   savingsRatePercent: number | null;
@@ -70,50 +81,61 @@ export async function getDashboard(period: ResolvedPeriod): Promise<DashboardDat
   const userId = await requireUserId();
   const previous = previousWindow(period);
 
-  const [current, before, categoryEntries, topExpenses, goals, evolution] = await Promise.all([
-    sumSigned(userId, period.start, period.end),
-    sumSigned(userId, previous.start, previous.end),
-    prisma.transaction.findMany({
-      where: {
-        userId,
-        ...NOT_TRANSFER,
-        amountCents: { lt: 0 },
-        date: { gte: period.start, lte: period.end },
-      },
-      select: {
-        date: true,
-        amountCents: true,
-        categoryId: true,
-        category: { select: { name: true } },
-      },
-    }),
-    prisma.transaction.findMany({
-      where: {
-        userId,
-        ...NOT_TRANSFER,
-        amountCents: { lt: 0 },
-        date: { gte: period.start, lte: period.end },
-      },
-      orderBy: { amountCents: "asc" },
-      take: TOP_EXPENSES,
-      select: {
-        id: true,
-        date: true,
-        description: true,
-        amountCents: true,
-        category: { select: { name: true } },
-        account: { select: { name: true } },
-      },
-    }),
-    listGoalProgress(userId),
-    balanceEvolution(userId, 6, period.end),
-  ]);
+  const [current, before, yieldTotal, categoryEntries, topExpenses, goals, evolution] =
+    await Promise.all([
+      sumSigned(userId, period.start, period.end),
+      sumSigned(userId, previous.start, previous.end),
+      prisma.transaction.aggregate({
+        where: {
+          userId,
+          type: "INCOME",
+          date: { gte: period.start, lte: period.end },
+          category: { isSystem: true, name: YIELD_CATEGORY_NAME },
+        },
+        _sum: { amountCents: true },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          userId,
+          ...NOT_TRANSFER,
+          amountCents: { lt: 0 },
+          date: { gte: period.start, lte: period.end },
+        },
+        select: {
+          date: true,
+          amountCents: true,
+          categoryId: true,
+          category: { select: { name: true } },
+        },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          userId,
+          ...NOT_TRANSFER,
+          amountCents: { lt: 0 },
+          date: { gte: period.start, lte: period.end },
+        },
+        orderBy: { amountCents: "asc" },
+        take: TOP_EXPENSES,
+        select: {
+          id: true,
+          date: true,
+          description: true,
+          amountCents: true,
+          category: { select: { name: true } },
+          account: { select: { name: true } },
+        },
+      }),
+      listGoalProgress(userId),
+      balanceEvolution(userId, 6, period.end),
+    ]);
 
   const income = compareToPrevious(current.incomeCents, before.incomeCents);
   const expense = compareToPrevious(current.expenseCents, before.expenseCents);
 
   return {
     income,
+    yieldCents: yieldTotal._sum.amountCents ?? 0,
     expense,
     netCents: current.incomeCents - current.expenseCents,
     savingsRatePercent: savingsRate(current.incomeCents, current.expenseCents),
@@ -249,7 +271,15 @@ export async function listAccountBalances(): Promise<AccountBalance[]> {
     prisma.account.findMany({
       where: { userId, archived: false },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, color: true, class: true, initialBalanceCents: true },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        class: true,
+        type: true,
+        parentAccountId: true,
+        initialBalanceCents: true,
+      },
     }),
     prisma.transaction.groupBy({
       by: ["accountId"],
@@ -259,14 +289,40 @@ export async function listAccountBalances(): Promise<AccountBalance[]> {
   ]);
 
   const movementById = new Map(movements.map((row) => [row.accountId, row._sum.amountCents ?? 0]));
+  const balanceOf = (account: (typeof accounts)[number]) =>
+    account.initialBalanceCents + (movementById.get(account.id) ?? 0);
 
-  return accounts.map((account) => ({
-    id: account.id,
-    name: account.name,
-    color: account.color,
-    balanceCents: account.initialBalanceCents + (movementById.get(account.id) ?? 0),
-    isCreditCard: account.class === "LIABILITY",
-  }));
+  const toBalance = (account: (typeof accounts)[number]): AccountBalance => {
+    const own = balanceOf(account);
+    const buckets = accounts
+      .filter((candidate) => candidate.parentAccountId === account.id)
+      .map(toBalance);
+    const split = splitParentBalance(
+      own,
+      buckets.map((bucket) => bucket.totalBalanceCents),
+    );
+
+    return {
+      id: account.id,
+      name: account.name,
+      color: account.color,
+      balanceCents: own,
+      isCreditCard: account.class === "LIABILITY",
+      isBucket: isBucket(account),
+      parentAccountId: account.parentAccountId,
+      availableBalanceCents: split.availableCents,
+      totalBalanceCents: split.totalCents,
+      buckets,
+    };
+  };
+
+  // Caixinha nunca aparece como conta de primeiro nível: ela vem aninhada na mãe.
+  return accounts.filter((account) => account.parentAccountId === null).map(toBalance);
+}
+
+/** Achata a árvore para consolidação: cada conta entra uma vez só, com o próprio saldo. */
+export function flattenAccounts(accounts: readonly AccountBalance[]): AccountBalance[] {
+  return accounts.flatMap((account) => [account, ...flattenAccounts(account.buckets)]);
 }
 
 async function listGoalProgress(userId: string): Promise<GoalProgress[]> {
@@ -278,15 +334,21 @@ async function listGoalProgress(userId: string): Promise<GoalProgress[]> {
       name: true,
       color: true,
       targetCents: true,
-      contributions: { select: { amountCents: true } },
+      bucketAccount: {
+        select: {
+          initialBalanceCents: true,
+          transactions: { select: { amountCents: true } },
+        },
+      },
     },
   });
 
   return goals.map((goal) => {
-    const savedCents = goal.contributions.reduce(
-      (total, contribution) => total + contribution.amountCents,
-      0,
-    );
+    // O progresso é saldo real da caixinha; meta sem caixinha ainda está em planejamento.
+    const savedCents = goal.bucketAccount
+      ? goal.bucketAccount.initialBalanceCents +
+        goal.bucketAccount.transactions.reduce((total, entry) => total + entry.amountCents, 0)
+      : 0;
 
     return {
       id: goal.id,

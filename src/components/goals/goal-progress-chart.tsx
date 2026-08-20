@@ -47,13 +47,17 @@ export function GoalProgressChart({
 
   const deadlineLabel = data.find((point) => point.chave === deadlineMonth)?.mes;
 
+  // Meta parada é uma linha reta no zero com o eixo repetindo "0": não há curva para ler,
+  // e o estado vazio diz mais do que o gráfico.
+  const stalled = data.every((point) => !point.real && !point.projecao);
+
   return (
     <ChartFrame
       summary={`Acumulado da meta: ${data
         .filter((point) => point.real !== null)
         .map((point) => `${point.mes} ${formatBRL(point.real ?? 0)}`)
         .join(", ")}. Alvo ${formatBRL(targetCents)}.`}
-      isEmpty={data.length < 2}
+      isEmpty={data.length < 2 || stalled}
       emptyMessage="Registre o primeiro aporte para a curva começar a aparecer."
       height={200}
     >

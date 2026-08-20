@@ -28,14 +28,27 @@ quando a fase de autenticação for implementada. `email` é `@unique`.
 
 ### Account
 
-Uma conta bancária, carteira ou cartão de crédito. `type` distingue
-`CHECKING | SAVINGS | CREDIT_CARD | INVESTMENT | CASH`, enquanto `class` define o lado
-contábil: todos os tipos, exceto cartão, são `ASSET`; cartão é `LIABILITY`.
+Uma conta bancária, carteira, cartão de crédito ou caixinha. `type` distingue
+`CHECKING | SAVINGS | CREDIT_CARD | INVESTMENT | CASH | SAVINGS_BUCKET`, enquanto `class`
+define o lado contábil: todos os tipos, exceto cartão, são `ASSET`; cartão é `LIABILITY`.
 
 - `institution` é opcional: uma carteira (`CASH`) não tem banco associado.
 - Os termos do cartão não ficam em `Account`: `CreditCardDetails` guarda fechamento,
   vencimento, limite, bandeira e quatro últimos dígitos numa relação 1:1. O serviço
   cria `Account` e `CreditCardDetails` na mesma transação de banco.
+
+`parentAccountId` é a auto-relação que sustenta a caixinha: preenchido apenas em
+`SAVINGS_BUCKET`, onde é obrigatório, sempre apontando para uma conta `ASSET` que não é
+outra caixinha — não há aninhamento. Essas três regras vivem no serviço, porque o schema
+só sabe dizer que a coluna é opcional. No banco a chave é `onDelete: Cascade`: caixinha
+não existe sem a mãe. O serviço, por sua vez, recusa apagar uma conta que ainda tem
+caixinhas, para a cascata nunca levar o lastro de uma meta sem avisar.
+
+Uma conta mãe expõe dois saldos, calculados em `splitParentBalance`:
+`availableBalanceCents` é o dinheiro livre, sem o que está nas caixinhas, e
+`totalBalanceCents` é disponível mais caixinhas. O consolidado do patrimônio soma cada
+conta uma vez — a mãe pelo saldo próprio, a caixinha pelo dela — e por isso nunca conta o
+mesmo dinheiro duas vezes.
 
 Deletar uma conta (`onDelete: Cascade` a partir de `User`, e as relações de `Account`
 para `Transaction`/`RecurringRule` também em cascade) apaga o histórico associado. Como
@@ -49,6 +62,11 @@ categoria, mas uma subcategoria não pode ter filhas — isso é garantido pela 
 serviço, não pelo schema (Prisma não expressa "profundidade máxima" declarativamente).
 `kind` (`INCOME | EXPENSE`) é obrigatório mesmo em categorias pai, e o serviço deve
 garantir que uma subcategoria tenha o mesmo `kind` do pai.
+
+`isSystem` marca categorias que o app mantém e o domínio referencia pelo nome —
+hoje só "Rendimentos" (`INCOME`), usada por toda receita de caixinha. Renomear ou
+arquivar quebraria a separação entre receita ativa e rendimento nos relatórios, então o
+serviço recusa editar e arquivar, e a interface troca os botões por um rótulo.
 
 Apagar uma categoria-pai desvincula (`SetNull`) suas subcategorias em vez de apagá-las
 em cascata — perder uma subcategoria porque a categoria-pai foi removida seria uma
@@ -163,12 +181,38 @@ Orçamento mensal por categoria. `month` guarda o primeiro dia do mês em UTC (e
 uma restrição do banco. `@@unique([userId, categoryId, month])` impede dois orçamentos
 para a mesma categoria no mesmo mês.
 
-### Goal e GoalContribution
+### Goal e a caixinha
 
-Uma meta de economia (`Goal`) tem um valor alvo e, opcionalmente, uma conta onde o
-dinheiro está de fato guardado. O progresso não é um campo calculado e armazenado — é a
-soma de `GoalContribution.amountCents` daquela meta, para não correr o risco de o total
-salvo dessincronizar da soma das contribuições reais.
+Uma meta de economia (`Goal`) tem um valor alvo e, opcionalmente, uma caixinha:
+`bucketAccountId` é `@unique`, numa relação 1:1 com a `Account` do tipo
+`SAVINGS_BUCKET` que guarda o dinheiro. Meta sem caixinha é um estado válido — é a meta
+em planejamento, com progresso zero e um CTA para criar a caixinha.
+
+O progresso **não** é anotação: é o saldo da caixinha, e portanto o mesmo número que o
+extrato mostra. Ele se decompõe em duas leituras (`decomposeBucketBalance`):
+`totalDepositedCents`, a soma das pernas positivas de `TRANSFER`, e `totalYieldCents`, a
+soma das receitas. As duas aparecem separadas na interface porque aportar é esforço e
+render não é — só o aporte entra no cálculo de ritmo e de projeção.
+
+Movimentar a caixinha tem regras próprias, todas em `account.buckets.ts` e aplicadas
+também no serviço de transações, para não haver porta dos fundos:
+
+- a caixinha só transaciona com a própria mãe: nada de caixinha para outra conta, para
+  outra caixinha ou para cartão;
+- aporte e resgate são transferências de duas pernas com `transferGroupId` e sem
+  categoria, e um aporte que deixaria a mãe negativa é recusado;
+- rendimento é um único lançamento `INCOME` na caixinha, sempre positivo, na categoria de
+  sistema "Rendimentos", sem perna oposta — é dinheiro que nasce ali;
+- despesa avulsa dentro da caixinha é recusada.
+
+`expectedYearlyRatePercent` é usada **apenas** na projeção, com juros compostos, e nunca
+gera lançamento: rendimento estimado é estimativa, e vai rotulado como tal na tela.
+Resgatar devolve o saldo inteiro para a mãe e arquiva a caixinha, sem apagar nada.
+
+Metas anteriores a esse modelo são convertidas por `scripts/migrate-goals-to-buckets.ts`,
+que pergunta, meta a meta, se o saldo da conta mãe já estava descontado (vira
+`initialBalanceCents` da caixinha) ou se o dinheiro ainda está lá (vira uma transferência
+consolidada na data da migração). O script é idempotente e nunca escolhe sozinho.
 
 ### RecurringRule
 

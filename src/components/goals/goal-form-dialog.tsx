@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/cn";
 import { formatCentsForInput } from "@/lib/money";
 import { IDLE_ACTION_STATE } from "@/server/action-state";
 import { GOAL_COLORS, GOAL_ICONS } from "@/server/goals/goal.schema";
@@ -70,7 +69,6 @@ function GoalForm({
   );
   const fieldId = useId();
   const { notify } = useToast();
-  const [linked, setLinked] = useState(goal?.accountId ?? "");
 
   useEffect(() => {
     if (state.status === "success") {
@@ -86,7 +84,10 @@ function GoalForm({
     targetDate: goal ? toISODate(goal.targetDate) : "",
     color: goal?.color ?? GOAL_COLORS[0],
     icon: goal?.icon ?? GOAL_ICONS[0],
-    accountId: goal?.accountId ?? "",
+    expectedYearlyRatePercent:
+      goal?.expectedYearlyRatePercent === null || goal?.expectedYearlyRatePercent === undefined
+        ? ""
+        : String(goal.expectedYearlyRatePercent),
   };
   const valueOf = (field: keyof typeof initial) => submitted?.[field] ?? initial[field];
   const errorFor = (field: string) =>
@@ -133,19 +134,31 @@ function GoalForm({
         </Field>
 
         <Field
-          label="Conta vinculada"
-          htmlFor={id("accountId")}
-          error={errorFor("accountId")}
-          hint="Opcional."
+          label="Rendimento anual esperado"
+          htmlFor={id("expectedYearlyRatePercent")}
+          error={errorFor("expectedYearlyRatePercent")}
+          hint="Só para projetar a data. Nunca vira lançamento."
         >
-          <Select
-            key={valueOf("accountId")}
-            id={id("accountId")}
-            name="accountId"
-            defaultValue={valueOf("accountId")}
-            onChange={(event) => setLinked(event.target.value)}
-          >
-            <option value="">Nenhuma</option>
+          <Input
+            id={id("expectedYearlyRatePercent")}
+            name="expectedYearlyRatePercent"
+            numeric
+            inputMode="decimal"
+            placeholder="ex.: 10,5"
+            defaultValue={valueOf("expectedYearlyRatePercent")}
+            invalid={Boolean(errorFor("expectedYearlyRatePercent"))}
+          />
+        </Field>
+      </div>
+
+      {!goal && (
+        <Field
+          label="Criar a caixinha agora"
+          htmlFor={id("parentAccountId")}
+          hint="A caixinha vira uma subconta desta conta. Dá para criar depois."
+        >
+          <Select id={id("parentAccountId")} name="parentAccountId" defaultValue="">
+            <option value="">Só planejar por enquanto</option>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.name}
@@ -153,31 +166,6 @@ function GoalForm({
             ))}
           </Select>
         </Field>
-      </div>
-
-      <label
-        className={cn(
-          "border-linha flex items-start gap-3 rounded-md border p-3 text-sm",
-          !linked && "opacity-50",
-        )}
-      >
-        <input
-          type="checkbox"
-          name="useAccountBalance"
-          defaultChecked={goal?.useAccountBalance ?? false}
-          disabled={!linked}
-          className="mt-0.5"
-        />
-        <span className="flex flex-col gap-0.5">
-          <span className="text-texto font-medium">Usar o saldo da conta como progresso</span>
-          <span className="text-texto-fraco text-xs">
-            O progresso passa a ser o saldo atual da conta, e o ritmo vem da variação dele. Os
-            aportes manuais continuam registrados, mas deixam de somar.
-          </span>
-        </span>
-      </label>
-      {errorFor("useAccountBalance") && (
-        <p className="text-alerta text-xs">{errorFor("useAccountBalance")}</p>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">

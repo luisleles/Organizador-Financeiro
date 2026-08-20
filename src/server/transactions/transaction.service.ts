@@ -1,6 +1,11 @@
-import type { Prisma } from "@prisma/client";
+import type { AccountClass, AccountType, Prisma, TransactionType } from "@prisma/client";
 import { fromZonedParts, toDateParts } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
+import {
+  BUCKET_RULE_MESSAGES,
+  validateBucketEntry,
+  validateBucketTransfer,
+} from "@/server/accounts/account.buckets";
 import type { ResolvedPeriod } from "@/lib/period";
 import { resolveCategoryForDescription } from "@/server/categories/category.service";
 import { requireUserId } from "@/server/current-user";
@@ -31,7 +36,8 @@ export type TransactionErrorCode =
   | "INVOICE_NOT_FOUND"
   | "INVOICE_NOT_PAYABLE"
   | "INVALID_PAYMENT_SOURCE"
-  | "PAYMENT_EXCEEDS_INVOICE";
+  | "PAYMENT_EXCEEDS_INVOICE"
+  | "BUCKET_RULE";
 
 export class TransactionServiceError extends Error {
   constructor(
@@ -117,6 +123,7 @@ export async function createTransaction(input: TransactionInput): Promise<string
   const userId = await requireUserId();
   return prisma.$transaction(async (tx) => {
     const account = await findAccount(tx, userId, input.accountId);
+    assertBucketEntryAllowed(account, input.type, signedAmount(input.type, input.amountCents));
     const date = fromISODate(input.date);
     const installmentCount = input.installments ?? 1;
 
@@ -222,6 +229,7 @@ export async function updateTransaction(
     for (const row of rows) assertInvoiceMutable(row.invoice?.status);
 
     const account = await findAccount(tx, userId, input.accountId);
+    assertBucketEntryAllowed(account, input.type, signedAmount(input.type, input.amountCents));
     const firstDate = fromISODate(input.date);
     let schedule =
       account.creditCardDetails === null
@@ -622,6 +630,25 @@ async function validateCommonTransferAccounts(
       "CREDIT_CARD_TRANSFER_FORBIDDEN",
       "Cartão de crédito não participa da transferência comum. Use Pagar fatura.",
     );
+  }
+
+  // Caixinha só conversa com a própria conta mãe — nunca com outra conta, outra caixinha
+  // ou cartão. As regras vivem em `account.buckets.ts` e são usadas também na criação.
+  const violation = validateBucketTransfer(source, destination);
+  if (violation) {
+    throw new TransactionServiceError("BUCKET_RULE", BUCKET_RULE_MESSAGES[violation]);
+  }
+}
+
+/** Bloqueia lançamento avulso dentro de caixinha: lá só entram aporte, resgate e rendimento. */
+function assertBucketEntryAllowed(
+  account: { id: string; type: AccountType; class: AccountClass; parentAccountId: string | null },
+  type: TransactionType,
+  amountCents: number,
+): void {
+  const violation = validateBucketEntry(account, type, amountCents);
+  if (violation) {
+    throw new TransactionServiceError("BUCKET_RULE", BUCKET_RULE_MESSAGES[violation]);
   }
 }
 

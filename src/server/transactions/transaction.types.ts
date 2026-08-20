@@ -1,4 +1,4 @@
-import type { TransactionType } from "@prisma/client";
+import type { AccountClass, AccountType, TransactionType } from "@prisma/client";
 import type { EntrySummary } from "./transaction.filters";
 
 export type TagRef = {
@@ -41,8 +41,8 @@ export type FilterOptions = {
     id: string;
     name: string;
     color: string;
-    type: "CHECKING" | "SAVINGS" | "CREDIT_CARD" | "INVESTMENT" | "CASH";
-    class: "ASSET" | "LIABILITY";
+    type: AccountType;
+    class: AccountClass;
   }[];
   transferAccounts: { id: string; name: string; color: string }[];
   categories: { id: string; name: string; kind: "INCOME" | "EXPENSE" }[];

@@ -48,7 +48,7 @@ export function AccountTable({ accounts, valuesHidden }: AccountTableProps) {
         </tr>
       </thead>
       <tbody>
-        {accounts.map((account) => (
+        {accounts.flatMap((account) => [
           <tr key={account.id} className="hover:bg-fundo">
             <AccountNameCell
               account={account}
@@ -62,15 +62,65 @@ export function AccountTable({ accounts, valuesHidden }: AccountTableProps) {
             </TableCell>
             <TableCell value>
               <Amount
-                cents={account.balanceCents}
+                cents={account.totalBalanceCents}
                 size="sm"
-                tone={account.balanceCents < 0 ? "alerta" : "neutro"}
+                tone={account.totalBalanceCents < 0 ? "alerta" : "neutro"}
                 sign="negative"
                 masked={valuesHidden}
               />
+              {account.buckets.length > 0 && (
+                <span className="text-texto-fraco block text-xs">
+                  livre{" "}
+                  <Amount
+                    cents={account.availableBalanceCents}
+                    size="xs"
+                    tone="neutro"
+                    sign="negative"
+                    masked={valuesHidden}
+                  />
+                </span>
+              )}
             </TableCell>
-          </tr>
-        ))}
+          </tr>,
+          /* Caixinha aparece indentada sob a mãe, nunca como conta de primeiro nível. */
+          ...account.buckets.map((bucket) => (
+            <tr key={bucket.id} className="hover:bg-fundo">
+              <TableCell>
+                <div className="flex items-center gap-3 pl-8">
+                  <span aria-hidden className="text-texto-fraco text-xs">
+                    ↳
+                  </span>
+                  <AccountMark color={bucket.color} icon={bucket.icon} />
+                  <span className="flex flex-col">
+                    <Link
+                      href={`/contas/${bucket.id}`}
+                      className="text-texto text-sm hover:underline hover:underline-offset-4"
+                    >
+                      {bucket.name}
+                    </Link>
+                    <span className="text-texto-fraco text-xs">em {account.name}</span>
+                  </span>
+                  {bucket.archived && <Badge tone="previsto">arquivada</Badge>}
+                </div>
+              </TableCell>
+              <TableCell muted className="hidden sm:table-cell">
+                Caixinha
+              </TableCell>
+              <TableCell muted className="hidden md:table-cell">
+                <span className="valor text-num-xs">{bucket.transactionCount}</span>
+              </TableCell>
+              <TableCell value>
+                <Amount
+                  cents={bucket.balanceCents}
+                  size="sm"
+                  tone="entrada"
+                  sign="negative"
+                  masked={valuesHidden}
+                />
+              </TableCell>
+            </tr>
+          )),
+        ])}
       </tbody>
     </Table>
   );

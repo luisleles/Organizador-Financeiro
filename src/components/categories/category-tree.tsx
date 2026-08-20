@@ -209,6 +209,7 @@ function Row({
       </Link>
 
       {node.kind === "INCOME" && <Badge tone="entrada">receita</Badge>}
+      {node.isSystem && <Badge tone="previsto">sistema</Badge>}
       <span className="valor text-num-xs text-texto-fraco">
         {node.transactionCount} {node.transactionCount === 1 ? "lançamento" : "lançamentos"}
       </span>
@@ -243,21 +244,27 @@ function Row({
           />
         )}
 
-        <CategoryFormDialog
-          category={node}
-          parents={parents}
-          label="Editar"
-          variant="ghost"
-          size="sm"
-        />
-        <ArchiveCategoryDialog
-          category={node}
-          subcategories={subcategories}
-          destinations={parents.filter(
-            (parent) =>
-              parent.id !== node.id && !subcategories.some((child) => child.id === parent.id),
-          )}
-        />
+        {node.isSystem ? (
+          <span className="text-texto-fraco text-xs">mantida pelo app</span>
+        ) : (
+          <>
+            <CategoryFormDialog
+              category={node}
+              parents={parents}
+              label="Editar"
+              variant="ghost"
+              size="sm"
+            />
+            <ArchiveCategoryDialog
+              category={node}
+              subcategories={subcategories}
+              destinations={parents.filter(
+                (parent) =>
+                  parent.id !== node.id && !subcategories.some((child) => child.id === parent.id),
+              )}
+            />
+          </>
+        )}
       </div>
     </div>
   );

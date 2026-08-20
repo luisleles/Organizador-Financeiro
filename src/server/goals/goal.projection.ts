@@ -60,12 +60,40 @@ export function recentPace(
   return Math.round(Math.max(total, 0) / windowMonths);
 }
 
+/**
+ * Meses até o alvo considerando aporte mensal **e** juros compostos sobre o que já está
+ * guardado. Sem taxa, cai na divisão simples. Devolve `null` quando não chega dentro do
+ * horizonte — inclusive quando o aporte é zero e só o juro não dá conta.
+ */
+export function monthsToReach(
+  currentCents: number,
+  targetCents: number,
+  monthlyDepositCents: number,
+  yearlyRatePercent: number | null,
+): number | null {
+  if (currentCents >= targetCents) return 0;
+
+  const monthlyRate =
+    yearlyRatePercent && yearlyRatePercent > 0 ? (1 + yearlyRatePercent / 100) ** (1 / 12) - 1 : 0;
+
+  if (monthlyDepositCents <= 0 && monthlyRate <= 0) return null;
+
+  let balance = currentCents;
+  for (let month = 1; month <= MAX_PROJECTION_MONTHS; month += 1) {
+    balance = balance * (1 + monthlyRate) + monthlyDepositCents;
+    if (balance >= targetCents) return month;
+  }
+
+  return null;
+}
+
 export function buildGoalPace(
   savedCents: number,
   targetCents: number,
   targetDate: Date,
   contributions: readonly Contribution[],
   reference: Date = new Date(),
+  yearlyRatePercent: number | null = null,
 ): GoalPace {
   const remainingCents = Math.max(targetCents - savedCents, 0);
   const completed = targetCents > 0 && savedCents >= targetCents;
@@ -76,15 +104,12 @@ export function buildGoalPace(
   const deadlinePassed = monthsBetween(today, deadline) < 0;
 
   const recentPacePerMonthCents = recentPace(contributions, reference);
-  const monthsToFinish =
-    remainingCents > 0 && recentPacePerMonthCents > 0
-      ? Math.ceil(remainingCents / recentPacePerMonthCents)
-      : null;
+  const monthsToFinish = completed
+    ? 0
+    : monthsToReach(savedCents, targetCents, recentPacePerMonthCents, yearlyRatePercent);
 
   const projectedDate =
-    completed || monthsToFinish === null || monthsToFinish > MAX_PROJECTION_MONTHS
-      ? null
-      : fromZonedParts(addMonths(today, monthsToFinish));
+    completed || monthsToFinish === null ? null : fromZonedParts(addMonths(today, monthsToFinish));
 
   return {
     savedCents,
@@ -125,6 +150,7 @@ export function buildGoalSeries(
   reference: Date = new Date(),
   /** Mês do prazo, para o eixo alcançá-lo mesmo quando a projeção termina antes. */
   deadlineMonth?: string,
+  yearlyRatePercent: number | null = null,
 ): GoalSeriesPoint[] {
   const currentMonth = monthKey(toDateParts(reference));
   const points: GoalSeriesPoint[] = monthlySaved.map((entry) => ({
@@ -135,16 +161,27 @@ export function buildGoalSeries(
 
   const today = { ...toDateParts(reference), day: 1 };
 
-  const monthsToFinish =
-    pace.completed || pace.recentPacePerMonthCents <= 0
-      ? 0
-      : Math.ceil(pace.remainingCents / pace.recentPacePerMonthCents);
+  const monthsToFinish = pace.completed
+    ? 0
+    : monthsToReach(
+        pace.savedCents,
+        pace.targetCents,
+        pace.recentPacePerMonthCents,
+        yearlyRatePercent,
+      );
 
-  if (monthsToFinish <= MAX_PROJECTION_MONTHS) {
+  if (monthsToFinish !== null) {
+    const monthlyRate =
+      yearlyRatePercent && yearlyRatePercent > 0
+        ? (1 + yearlyRatePercent / 100) ** (1 / 12) - 1
+        : 0;
     let running = pace.savedCents;
 
     for (let index = 1; index <= monthsToFinish; index += 1) {
-      running = Math.min(running + pace.recentPacePerMonthCents, pace.targetCents);
+      running = Math.min(
+        Math.round(running * (1 + monthlyRate)) + pace.recentPacePerMonthCents,
+        pace.targetCents,
+      );
       points.push({
         month: monthKey(addMonths(today, index)),
         realCents: null,

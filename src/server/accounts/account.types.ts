@@ -28,6 +28,14 @@ export type AccountSummary = {
   balanceCents: number;
   transactionCount: number;
   creditCard: CreditCardStatus | null;
+  parentAccountId: string | null;
+  isBucket: boolean;
+  /** Saldo livre, sem o que está nas caixinhas filhas. */
+  availableBalanceCents: number;
+  /** Disponível mais caixinhas. É este que entra no patrimônio. */
+  totalBalanceCents: number;
+  /** Caixinhas filhas. Sempre vazio numa caixinha — não há aninhamento. */
+  buckets: AccountSummary[];
 };
 
 export type AccountListing = {

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
 import { BalanceEvolutionChart } from "@/components/charts/balance-evolution-chart";
@@ -11,7 +12,11 @@ import { parsePeriod, resolvePeriod } from "@/lib/period";
 import { consolidateBalances } from "@/server/accounts/account.balance";
 import { readValuesHidden } from "@/server/preferences";
 import { currentMonth, getMonthlyBudgets } from "@/server/budgets/budget.service";
-import { getDashboard, listAccountBalances } from "@/server/reports/report.service";
+import {
+  flattenAccounts,
+  getDashboard,
+  listAccountBalances,
+} from "@/server/reports/report.service";
 import type { Variation } from "@/server/reports/report.aggregations";
 
 type InicioPageProps = {
@@ -31,8 +36,11 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
 
   const overBudget = budgets.rows.filter((row) => row.progress.status === "estourado");
 
+  // Achata a árvore para consolidar: cada conta entra uma vez, com o próprio saldo. A
+  // caixinha soma como qualquer outra conta, e o disponível da mãe já exclui o que está
+  // nela — não há dupla contagem.
   const consolidated = consolidateBalances(
-    accounts.map((account) => ({
+    flattenAccounts(accounts).map((account) => ({
       balanceCents: account.balanceCents,
       isCreditCard: account.isCreditCard,
     })),
@@ -96,31 +104,56 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
 
           <ul className="flex flex-1 flex-col gap-1 lg:max-w-md">
             {accounts.map((account) => (
-              <li
-                key={account.id}
-                className="border-linha flex items-center gap-3 border-b pb-1 last:border-b-0"
-              >
-                <span
-                  aria-hidden
-                  className="size-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: account.color }}
-                />
-                <Link
-                  href={`/contas/${account.id}`}
-                  className="text-texto text-sm hover:underline hover:underline-offset-4"
-                >
-                  {account.name}
-                </Link>
-                {account.isCreditCard && <Badge tone="previsto">cartão</Badge>}
-                <span className="ml-auto">
-                  <Amount
-                    cents={account.balanceCents}
-                    size="xs"
-                    tone={account.balanceCents < 0 ? "alerta" : "neutro"}
-                    sign="negative"
-                    masked={valuesHidden}
+              <li key={account.id} className="flex flex-col">
+                <div className="border-linha flex items-center gap-3 border-b pb-1">
+                  <span
+                    aria-hidden
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: account.color }}
                   />
-                </span>
+                  <Link
+                    href={`/contas/${account.id}`}
+                    className="text-texto text-sm hover:underline hover:underline-offset-4"
+                  >
+                    {account.name}
+                  </Link>
+                  {account.isCreditCard && <Badge tone="previsto">cartão</Badge>}
+                  <span className="ml-auto">
+                    <Amount
+                      cents={account.totalBalanceCents}
+                      size="xs"
+                      tone={account.totalBalanceCents < 0 ? "alerta" : "neutro"}
+                      sign="negative"
+                      masked={valuesHidden}
+                    />
+                  </span>
+                </div>
+
+                {account.buckets.map((bucket) => (
+                  <div
+                    key={bucket.id}
+                    className="border-linha flex items-center gap-2 border-b py-1 pl-6"
+                  >
+                    <span aria-hidden className="text-texto-fraco text-xs">
+                      ↳
+                    </span>
+                    <Link
+                      href={`/contas/${bucket.id}`}
+                      className="text-texto-fraco text-xs hover:underline hover:underline-offset-4"
+                    >
+                      {bucket.name}
+                    </Link>
+                    <span className="ml-auto">
+                      <Amount
+                        cents={bucket.balanceCents}
+                        size="xs"
+                        tone="entrada"
+                        sign="never"
+                        masked={valuesHidden}
+                      />
+                    </span>
+                  </div>
+                ))}
               </li>
             ))}
           </ul>
@@ -133,6 +166,21 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
           variation={dashboard.income}
           tone="entrada"
           masked={valuesHidden}
+          footer={
+            dashboard.yieldCents > 0 ? (
+              <>
+                Inclui{" "}
+                <Amount
+                  cents={dashboard.yieldCents}
+                  size="xs"
+                  tone="entrada"
+                  sign="never"
+                  masked={valuesHidden}
+                />{" "}
+                de rendimento de caixinha.
+              </>
+            ) : undefined
+          }
         />
         <FlowCard
           label="Saídas"
@@ -267,9 +315,10 @@ type FlowCardProps = {
   masked: boolean;
   /** Em despesa, subir é ruim: o tom da variação inverte. */
   inverted?: boolean;
+  footer?: ReactNode;
 };
 
-function FlowCard({ label, variation, tone, masked, inverted = false }: FlowCardProps) {
+function FlowCard({ label, variation, tone, masked, inverted = false, footer }: FlowCardProps) {
   const worse = inverted ? variation.deltaCents > 0 : variation.deltaCents < 0;
   const variationTone =
     variation.deltaCents === 0 ? "text-texto-fraco" : worse ? "text-alerta" : "text-entrada";
@@ -289,6 +338,7 @@ function FlowCard({ label, variation, tone, masked, inverted = false }: FlowCard
           </>
         )}
       </p>
+      {footer && <p className="text-texto-fraco mt-1 text-xs">{footer}</p>}
     </Card>
   );
 }

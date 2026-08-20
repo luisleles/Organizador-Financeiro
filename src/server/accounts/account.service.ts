@@ -1,6 +1,7 @@
 import type { AccountClass, AccountType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/server/current-user";
+import { isBucket, splitParentBalance } from "./account.buckets";
 import {
   accountBalanceCents,
   buildBalanceSeries,
@@ -18,7 +19,11 @@ import type {
   CreditCardStatus,
 } from "./account.types";
 
-export type AccountErrorCode = "NOT_FOUND" | "HAS_TRANSACTIONS" | "INVALID_TYPE_CHANGE";
+export type AccountErrorCode =
+  | "NOT_FOUND"
+  | "HAS_TRANSACTIONS"
+  | "INVALID_TYPE_CHANGE"
+  | "HAS_BUCKETS";
 
 export class AccountServiceError extends Error {
   constructor(
@@ -78,8 +83,36 @@ export async function listAccounts(
   ]);
 
   const summaries = accounts.map((account) => toSummary(account, totalsByAccount.get(account.id)));
+  const byParent = new Map<string, AccountSummary[]>();
+  for (const summary of summaries) {
+    if (!summary.parentAccountId) continue;
+    byParent.set(summary.parentAccountId, [
+      ...(byParent.get(summary.parentAccountId) ?? []),
+      summary,
+    ]);
+  }
+
+  // Caixinha nunca é conta de primeiro nível: ela aparece aninhada na mãe.
+  const topLevel = summaries
+    .filter((summary) => !summary.isBucket)
+    .map((summary) => {
+      const buckets = byParent.get(summary.id) ?? [];
+      const split = splitParentBalance(
+        summary.balanceCents,
+        buckets.map((bucket) => bucket.balanceCents),
+      );
+
+      return {
+        ...summary,
+        buckets,
+        availableBalanceCents: split.availableCents,
+        totalBalanceCents: split.totalCents,
+      };
+    });
+
   return {
-    accounts: summaries,
+    accounts: topLevel,
+    // Consolida cada conta uma vez só — a mãe pelo saldo próprio, a caixinha pelo dela.
     consolidated: consolidateBalances(
       summaries
         .filter((summary) => !summary.archived)
@@ -234,6 +267,17 @@ export async function deleteAccount(accountId: string): Promise<void> {
       select: { id: true },
     });
     if (!account) throw notFound();
+
+    // A cascata do banco levaria as caixinhas junto sem avisar. Caixinha é lastro de uma
+    // meta: quem quer sumir com ela resgata pela meta, não apagando a conta mãe.
+    const bucketCount = await tx.account.count({ where: { parentAccountId: accountId, userId } });
+    if (bucketCount > 0) {
+      throw new AccountServiceError(
+        "HAS_BUCKETS",
+        "Esta conta tem caixinhas de metas. Resgate as metas antes de apagá-la.",
+      );
+    }
+
     const transactionCount = await tx.transaction.count({ where: { accountId, userId } });
     if (transactionCount > 0) {
       throw new AccountServiceError(
@@ -276,6 +320,11 @@ function toSummary(account: AccountWithCard, totals?: AccountTotals): AccountSum
     balanceCents,
     transactionCount: resolved.transactionCount,
     creditCard: toCreditCardStatus(account, balanceCents),
+    parentAccountId: account.parentAccountId,
+    isBucket: isBucket(account),
+    availableBalanceCents: balanceCents,
+    totalBalanceCents: balanceCents,
+    buckets: [],
   };
 }
 

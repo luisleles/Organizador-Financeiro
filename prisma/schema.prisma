@@ -13,6 +13,8 @@ enum AccountType {
   CREDIT_CARD
   INVESTMENT
   CASH
+  /// Caixinha: subconta de uma conta de ativo, usada como lastro de uma meta.
+  SAVINGS_BUCKET
 }
 
 enum AccountClass {
@@ -76,13 +78,20 @@ model Account {
   archived            Boolean      @default(false)
   createdAt           DateTime     @default(now())
 
+  /// Preenchido apenas em SAVINGS_BUCKET, onde é obrigatório. A mãe é sempre ASSET e
+  /// nunca outra caixinha — não há aninhamento. Regra garantida no serviço.
+  parentAccountId String?
+
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentAccount     Account?           @relation("AccountBuckets", fields: [parentAccountId], references: [id], onDelete: Cascade)
+  buckets           Account[]          @relation("AccountBuckets")
   creditCardDetails CreditCardDetails?
   transactions      Transaction[]
-  goals             Goal[]
+  goal              Goal?
   recurringRules    RecurringRule[]
 
   @@index([userId])
+  @@index([parentAccountId])
 }
 
 model CreditCardDetails {
@@ -124,6 +133,9 @@ model Category {
   icon     String
   parentId String?
   archived Boolean      @default(false)
+
+  /// Categoria criada pelo sistema: não pode ser editada nem excluída.
+  isSystem Boolean @default(false)
 
   // Posição dentro do grupo de irmãos. Empate cai na ordem alfabética, o que mantém a
   // lista estável antes de alguém arrastar qualquer coisa.
@@ -225,32 +237,22 @@ model Goal {
   name        String
   targetCents Int
   targetDate  DateTime
-  accountId   String?
   color       String
   icon        String
   archived    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  /// Quando ligado, o progresso é o saldo da conta vinculada em vez da soma dos aportes.
-  useAccountBalance Boolean @default(false)
+  /// Caixinha que lastreia a meta. Nula enquanto a meta está só no planejamento.
+  bucketAccountId String? @unique
 
-  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account       Account?           @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  contributions GoalContribution[]
+  /// Rendimento anual esperado, em porcentagem. Serve **apenas** para projetar a data de
+  /// conclusão; nunca gera transação nem entra em saldo.
+  expectedYearlyRatePercent Decimal?
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bucketAccount Account? @relation(fields: [bucketAccountId], references: [id], onDelete: SetNull)
 
   @@index([userId])
-}
-
-model GoalContribution {
-  id          String   @id @default(cuid())
-  goalId      String
-  date        DateTime
-  amountCents Int
-  note        String?
-
-  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
-
-  @@index([goalId])
 }
 
 model RecurringRule {

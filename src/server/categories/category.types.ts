@@ -5,6 +5,8 @@ import type { MonthlyTotal, PeriodComparison } from "./category.stats";
 export type CategorySummary = FlatCategory & {
   /** Lançamentos ligados diretamente a esta categoria, sem contar as filhas. */
   transactionCount: number;
+  /** Categoria criada pelo sistema, como "Rendimentos": não se edita nem se arquiva. */
+  isSystem: boolean;
 };
 
 export type CategoryTree = CategoryNode<CategorySummary>[];

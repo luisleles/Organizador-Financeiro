@@ -9,14 +9,22 @@ import {
   type ActionState,
   type FieldErrors,
 } from "@/server/action-state";
-import { contributionInputSchema, goalInputSchema } from "@/server/goals/goal.schema";
+import {
+  createBucketSchema,
+  goalInputSchema,
+  goalMovementSchema,
+  yieldBatchSchema,
+} from "@/server/goals/goal.schema";
 import {
   GoalServiceError,
-  addContribution,
+  createBucketForGoal,
   createGoal,
-  removeContribution,
+  depositToGoal,
+  redeemGoal,
+  registerYieldBatch,
   setGoalArchived,
   updateGoal,
+  withdrawFromGoal,
 } from "@/server/goals/goal.service";
 
 const brlToCents = z
@@ -25,19 +33,25 @@ const brlToCents = z
   .min(1, "Informe um valor")
   .transform((value, ctx) => {
     try {
-      return parseBRLInput(value);
+      return Math.abs(parseBRLInput(value));
     } catch {
       ctx.addIssue({ code: "custom", message: "Valor inválido" });
       return z.NEVER;
     }
   });
 
-const optionalId = z
+const optionalRate = z
   .string()
   .trim()
-  .transform((value) => value || null);
-
-const checkbox = z.string().transform((value) => value === "on" || value === "true");
+  .transform((value, ctx) => {
+    if (value === "") return null;
+    const parsed = Number(value.replace(",", "."));
+    if (Number.isNaN(parsed)) {
+      ctx.addIssue({ code: "custom", message: "Taxa inválida" });
+      return z.NEVER;
+    }
+    return parsed;
+  });
 
 const goalFormSchema = z
   .object({
@@ -46,19 +60,13 @@ const goalFormSchema = z
     targetDate: z.string(),
     color: z.string(),
     icon: z.string(),
-    accountId: optionalId,
-    useAccountBalance: checkbox,
+    expectedYearlyRatePercent: optionalRate,
   })
   .pipe(goalInputSchema);
 
-const contributionFormSchema = z
-  .object({
-    goalId: z.string(),
-    date: z.string(),
-    amountCents: brlToCents,
-    note: z.string().optional(),
-  })
-  .pipe(contributionInputSchema);
+const movementFormSchema = z
+  .object({ goalId: z.string(), amountCents: brlToCents, date: z.string() })
+  .pipe(goalMovementSchema);
 
 export async function createGoalAction(
   _previous: ActionState,
@@ -69,7 +77,11 @@ export async function createGoalAction(
   if (!parsed.success) return invalidForm(parsed.error, submitted);
 
   try {
-    await createGoal(parsed.data);
+    const goalId = await createGoal(parsed.data);
+    const parentAccountId = readText(formData, "parentAccountId");
+
+    // Criar já com caixinha é o caminho principal; sem conta mãe, a meta nasce em planejamento.
+    if (parentAccountId) await createBucketForGoal(goalId, parentAccountId);
   } catch (error) {
     return toActionError(error);
   }
@@ -99,6 +111,91 @@ export async function updateGoalAction(
   return actionSuccess("Meta atualizada.");
 }
 
+export async function createBucketAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = createBucketSchema.safeParse({
+    goalId: readText(formData, "goalId"),
+    parentAccountId: readText(formData, "parentAccountId"),
+  });
+  if (!parsed.success) return actionError("Escolha a conta mãe da caixinha.");
+
+  try {
+    await createBucketForGoal(parsed.data.goalId, parsed.data.parentAccountId);
+  } catch (error) {
+    return toActionError(error);
+  }
+
+  revalidateGoals();
+  return actionSuccess("Caixinha criada.");
+}
+
+export async function depositAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return movement(formData, depositToGoal, "Aporte registrado.");
+}
+
+export async function withdrawAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return movement(formData, withdrawFromGoal, "Resgate registrado.");
+}
+
+export async function registerYieldAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const goalId = readText(formData, "goalId");
+  const months = formData.getAll("month").filter((v): v is string => typeof v === "string");
+  const amounts = formData.getAll("amount").filter((v): v is string => typeof v === "string");
+
+  const entries = months
+    .map((month, index) => ({ month, amount: amounts[index] ?? "" }))
+    .filter((entry) => entry.amount.trim() !== "")
+    .map((entry) => {
+      try {
+        return { month: entry.month, amountCents: Math.abs(parseBRLInput(entry.amount)) };
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry): entry is { month: string; amountCents: number } => entry !== null);
+
+  const parsed = yieldBatchSchema.safeParse({ goalId, entries });
+  if (!parsed.success) return actionError("Informe ao menos um mês com valor válido.");
+
+  try {
+    const created = await registerYieldBatch(parsed.data);
+    revalidateGoals();
+    return actionSuccess(
+      created === 1 ? "Rendimento lançado." : `${created} rendimentos lançados.`,
+    );
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function redeemGoalAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const goalId = readText(formData, "goalId");
+  const date = readText(formData, "date");
+  if (!goalId || !date) return actionError("Meta inválida.");
+
+  try {
+    const redeemed = await redeemGoal(goalId, date);
+    revalidateGoals();
+    return actionSuccess(`Resgatado ${(redeemed / 100).toFixed(2)} para a conta mãe.`);
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
 export async function setGoalArchivedAction(
   _previous: ActionState,
   formData: FormData,
@@ -106,57 +203,38 @@ export async function setGoalArchivedAction(
   const goalId = readText(formData, "goalId");
   if (!goalId) return actionError("Meta inválida.");
 
-  const archived = readText(formData, "archived") === "1";
-
   try {
-    await setGoalArchived(goalId, archived);
+    await setGoalArchived(goalId, readText(formData, "archived") === "1");
   } catch (error) {
     return toActionError(error);
   }
 
   revalidateGoals();
-  return actionSuccess(archived ? "Meta arquivada." : "Meta reativada.");
+  return actionSuccess("Meta atualizada.");
 }
 
-export async function addContributionAction(
-  _previous: ActionState,
+async function movement(
   formData: FormData,
+  run: (input: { goalId: string; amountCents: number; date: string }) => Promise<void>,
+  message: string,
 ): Promise<ActionState> {
   const submitted = {
     goalId: readText(formData, "goalId"),
-    date: readText(formData, "date"),
     amountCents: readText(formData, "amountCents"),
-    note: readText(formData, "note"),
+    date: readText(formData, "date"),
   };
 
-  const parsed = contributionFormSchema.safeParse(submitted);
+  const parsed = movementFormSchema.safeParse(submitted);
   if (!parsed.success) return invalidForm(parsed.error, submitted);
 
   try {
-    await addContribution(parsed.data);
+    await run(parsed.data);
   } catch (error) {
     return toActionError(error);
   }
 
   revalidateGoals();
-  return actionSuccess("Aporte registrado.");
-}
-
-export async function removeContributionAction(
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const contributionId = readText(formData, "contributionId");
-  if (!contributionId) return actionError("Aporte inválido.");
-
-  try {
-    await removeContribution(contributionId);
-  } catch (error) {
-    return toActionError(error);
-  }
-
-  revalidateGoals();
-  return actionSuccess("Aporte removido.");
+  return actionSuccess(message);
 }
 
 function readGoalForm(formData: FormData) {
@@ -166,8 +244,7 @@ function readGoalForm(formData: FormData) {
     targetDate: readText(formData, "targetDate"),
     color: readText(formData, "color"),
     icon: readText(formData, "icon"),
-    accountId: readText(formData, "accountId"),
-    useAccountBalance: readText(formData, "useAccountBalance") || "false",
+    expectedYearlyRatePercent: readText(formData, "expectedYearlyRatePercent"),
   };
 }
 
@@ -188,5 +265,7 @@ function toActionError(error: unknown): ActionState {
 
 function revalidateGoals(): void {
   revalidatePath("/metas");
+  revalidatePath("/contas");
+  revalidatePath("/transacoes");
   revalidatePath("/");
 }

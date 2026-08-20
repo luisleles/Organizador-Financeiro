@@ -24,7 +24,8 @@ export type CategoryErrorCode =
   | "PARENT_IS_CHILD"
   | "KIND_MISMATCH"
   | "SELF_PARENT"
-  | "REASSIGN_TO_SELF";
+  | "REASSIGN_TO_SELF"
+  | "SYSTEM_CATEGORY";
 
 export class CategoryServiceError extends Error {
   constructor(
@@ -65,6 +66,7 @@ export async function listCategories(): Promise<CategoryListing> {
     archived: category.archived,
     sortOrder: category.sortOrder,
     transactionCount: countById.get(category.id) ?? 0,
+    isSystem: category.isSystem,
   }));
 
   const active = flat.filter((category) => !category.archived);
@@ -141,6 +143,7 @@ export async function getCategoryDetail(
     archived: row.archived,
     sortOrder: row.sortOrder,
     transactionCount: countById.get(row.id) ?? 0,
+    isSystem: row.isSystem,
   });
 
   return {
@@ -179,6 +182,7 @@ export async function createCategory(input: CategoryInput): Promise<string> {
 
 export async function updateCategory(categoryId: string, input: CategoryInput): Promise<void> {
   const userId = await requireUserId();
+  await assertNotSystem(userId, categoryId);
   await assertValidParent(userId, input, categoryId);
 
   const { count } = await prisma.category.updateMany({
@@ -222,9 +226,10 @@ export async function archiveCategory(request: ArchiveCategoryRequest): Promise<
   return prisma.$transaction(async (tx) => {
     const category = await tx.category.findFirst({
       where: { id: request.categoryId, userId },
-      select: { id: true },
+      select: { id: true, isSystem: true },
     });
     if (!category) throw notFound();
+    if (category.isSystem) throw systemCategory();
 
     const children = await tx.category.findMany({
       where: { userId, parentId: request.categoryId },
@@ -464,6 +469,27 @@ function toServiceError(error: unknown): Error {
   return new CategoryServiceError(
     error.code === "PARENT_NOT_FOUND" ? "NOT_FOUND" : error.code,
     messages[error.code] ?? "Movimento inválido.",
+  );
+}
+
+/**
+ * Categoria de sistema é referência de outra parte do domínio — "Rendimentos" é o que
+ * separa rendimento de caixinha de receita de trabalho nos relatórios. Renomear ou
+ * arquivar quebraria essa leitura, então nem uma coisa nem outra é permitida.
+ */
+async function assertNotSystem(userId: string, categoryId: string): Promise<void> {
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, userId },
+    select: { isSystem: true },
+  });
+  if (!category) throw notFound();
+  if (category.isSystem) throw systemCategory();
+}
+
+function systemCategory(): CategoryServiceError {
+  return new CategoryServiceError(
+    "SYSTEM_CATEGORY",
+    "Esta categoria é do sistema e não pode ser editada nem arquivada.",
   );
 }
 
