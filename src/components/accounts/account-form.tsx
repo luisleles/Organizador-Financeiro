@@ -107,11 +107,15 @@ export function AccountForm({ action, account, onSuccess, onCancel }: AccountFor
         </Field>
 
         <Field
-          label={isCreditCard ? "Crédito inicial" : "Saldo inicial"}
+          label={isCreditCard ? "Dívida inicial" : "Saldo inicial"}
           htmlFor={id("initialBalanceCents")}
           error={errorFor("initialBalanceCents")}
           hint={
-            account || isCreditCard ? undefined : "O saldo do dia em que você começa a registrar."
+            isCreditCard
+              ? "Normalmente 0. Só é diferente se o cartão já tiver fatura em aberto no dia em que você cadastrá-lo — isto NÃO é o limite do cartão."
+              : account
+                ? undefined
+                : "O saldo do dia em que você começa a registrar."
           }
         >
           <Input
