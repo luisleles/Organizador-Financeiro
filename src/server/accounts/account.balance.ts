@@ -22,24 +22,61 @@ export type BalancePoint = {
 
 export type ConsolidationEntry = {
   balanceCents: number;
+  /** `class LIABILITY` — hoje, só cartão de crédito. */
   isCreditCard: boolean;
 };
 
 export type ConsolidatedBalance = {
-  /**
-   * Saldo em contas: tudo que não é dívida de cartão. Inclui o crédito de um cartão pago
-   * a mais, que é dinheiro disponível, para que `netCents` continue sendo exatamente a
-   * soma dos saldos de todas as contas.
-   */
-  accountsBalanceCents: number;
-  /** Faturas em aberto, em módulo. Sempre `>= 0`. */
+  assetsBalanceCents: number;
+  liabilitiesBalanceCents: number;
+  netWorthCents: number;
+  /** `Math.abs(liabilitiesBalanceCents)`: a mesma dívida, só que exibida como número positivo. */
   openInvoicesCents: number;
-  /** Saldo líquido: contas menos faturas. */
-  netCents: number;
 };
 
 export function sumMovementCents(entries: readonly MovementEntry[]): number {
   return entries.reduce((total, entry) => total + entry.amountCents, 0);
+}
+
+/**
+ * Soma só o que é ativo: toda conta `class ASSET`, caixinha incluída — sem dobrar com a
+ * conta mãe, porque a transferência para a caixinha já reduziu o saldo da mãe no próprio
+ * lançamento, não há o que descontar de novo aqui. Um cartão pago a mais entra por aqui
+ * também, pelo crédito que sobrou: é dinheiro disponível, não dívida.
+ *
+ * `creditLimitCents` e `availableLimitCents` **nunca** entram nesta soma: limite é crédito
+ * que o banco oferece, não algo que a pessoa tem — não é patrimônio.
+ */
+export function assetsBalanceCents(entries: readonly ConsolidationEntry[]): number {
+  return entries.reduce(
+    (total, entry) =>
+      total + (entry.isCreditCard ? Math.max(entry.balanceCents, 0) : entry.balanceCents),
+    0,
+  );
+}
+
+/**
+ * Soma só o que é passivo: toda conta `class LIABILITY`, sempre `<= 0`. Um cartão pago a
+ * mais nunca aparece aqui como passivo positivo — o excedente dele já foi contado em
+ * `assetsBalanceCents`.
+ *
+ * Mesma regra de `assetsBalanceCents`: `creditLimitCents` e `availableLimitCents` nunca
+ * entram nesta soma.
+ */
+export function liabilitiesBalanceCents(entries: readonly ConsolidationEntry[]): number {
+  return entries.reduce(
+    (total, entry) => total + (entry.isCreditCard ? Math.min(entry.balanceCents, 0) : 0),
+    0,
+  );
+}
+
+/**
+ * Patrimônio líquido: ativo mais passivo, que já vem negativo. Por vir só destas duas
+ * funções, `netWorthCents` herda a mesma garantia — limite de cartão não é patrimônio e
+ * não entra aqui.
+ */
+export function netWorthCents(entries: readonly ConsolidationEntry[]): number {
+  return assetsBalanceCents(entries) + liabilitiesBalanceCents(entries);
 }
 
 export function accountBalanceCents(initialBalanceCents: number, movementCents: number): number {
@@ -53,27 +90,16 @@ export function calculateBalanceCents(
   return accountBalanceCents(initialBalanceCents, sumMovementCents(entries));
 }
 
-/**
- * O limite disponível de um cartão **nunca** entra aqui: limite é crédito de terceiro, não
- * patrimônio. O cartão participa apenas pela dívida, que é negativa.
- */
+/** Atalho para pegar as três grandezas de uma vez, sem repetir a soma de cada uma. */
 export function consolidateBalances(entries: readonly ConsolidationEntry[]): ConsolidatedBalance {
-  let accountsBalanceCents = 0;
-  let openInvoicesCents = 0;
-
-  for (const entry of entries) {
-    const isDebt = entry.isCreditCard && entry.balanceCents < 0;
-    if (isDebt) {
-      openInvoicesCents += -entry.balanceCents;
-    } else {
-      accountsBalanceCents += entry.balanceCents;
-    }
-  }
+  const assets = assetsBalanceCents(entries);
+  const liabilities = liabilitiesBalanceCents(entries);
 
   return {
-    accountsBalanceCents,
-    openInvoicesCents,
-    netCents: accountsBalanceCents - openInvoicesCents,
+    assetsBalanceCents: assets,
+    liabilitiesBalanceCents: liabilities,
+    netWorthCents: assets + liabilities,
+    openInvoicesCents: Math.abs(liabilities),
   };
 }
 

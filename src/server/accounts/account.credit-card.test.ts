@@ -69,9 +69,9 @@ describe("saldo consolidado com cartão de crédito", () => {
       { balanceCents: DEBT, isCreditCard: true },
     ]);
 
-    expect(totals.accountsBalanceCents).toBe(500000);
+    expect(totals.assetsBalanceCents).toBe(500000);
     expect(totals.openInvoicesCents).toBe(120000);
-    expect(totals.netCents).toBe(380000); // R$ 3.800,00
+    expect(totals.netWorthCents).toBe(380000); // R$ 3.800,00
   });
 
   it("não soma o limite disponível ao consolidado", () => {
@@ -82,17 +82,17 @@ describe("saldo consolidado com cartão de crédito", () => {
     ]);
 
     expect(position.availableLimitCents).toBe(880000);
-    expect(totals.netCents).toBe(380000);
-    expect(totals.netCents).not.toBe(CHECKING + position.availableLimitCents);
+    expect(totals.netWorthCents).toBe(380000);
+    expect(totals.netWorthCents).not.toBe(CHECKING + position.availableLimitCents);
   });
 
-  it("dobrar o limite do cartão não muda um centavo do consolidado", () => {
+  it("dobrar o limite do cartão não muda um centavo do patrimônio líquido", () => {
     const totals = (limitCents: number) => {
       creditCardPosition(DEBT, limitCents);
       return consolidateBalances([
         { balanceCents: CHECKING, isCreditCard: false },
         { balanceCents: DEBT, isCreditCard: true },
-      ]).netCents;
+      ]).netWorthCents;
     };
 
     expect(totals(CREDIT_LIMIT)).toBe(totals(CREDIT_LIMIT * 2));
@@ -125,14 +125,14 @@ describe("pagamento de fatura por transferência", () => {
     expect(after.openInvoicesCents).toBe(0);
   });
 
-  it("reduz o saldo em contas exatamente no valor pago, sem despesa extra", () => {
-    expect(after.accountsBalanceCents).toBe(before.accountsBalanceCents - payment);
-    expect(after.accountsBalanceCents).toBe(380000);
+  it("reduz o ativo exatamente no valor pago, sem despesa extra", () => {
+    expect(after.assetsBalanceCents).toBe(before.assetsBalanceCents - payment);
+    expect(after.assetsBalanceCents).toBe(380000);
   });
 
-  it("mantém o saldo líquido, porque ativo e dívida caíram no mesmo valor", () => {
-    expect(after.netCents).toBe(before.netCents);
-    expect(after.netCents).toBe(380000);
+  it("mantém o patrimônio líquido, porque ativo e dívida caíram no mesmo valor", () => {
+    expect(after.netWorthCents).toBe(before.netWorthCents);
+    expect(after.netWorthCents).toBe(380000);
   });
 
   it("devolve o limite ao cartão", () => {

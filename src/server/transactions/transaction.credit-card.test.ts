@@ -344,7 +344,7 @@ describe("pagamento de fatura", () => {
     });
     expect(cardAfter.balanceCents).toBe(cardBefore.balanceCents + 120_000);
     expect(paymentExpenses).toBe(0);
-    expect(after.consolidated.netCents).toBe(before.consolidated.netCents);
+    expect(after.consolidated.netWorthCents).toBe(before.consolidated.netWorthCents);
   });
 
   it("nunca soma limite disponível ao consolidado", async () => {
@@ -357,8 +357,8 @@ describe("pagamento de fatura", () => {
       { balanceCents: checking.balanceCents, isCreditCard: false },
       { balanceCents: card.balanceCents, isCreditCard: true },
     ]);
-    expect(listing.consolidated.netCents).toBe(explicit.netCents);
-    expect(listing.consolidated.netCents).not.toBe(
+    expect(listing.consolidated.netWorthCents).toBe(explicit.netWorthCents);
+    expect(listing.consolidated.netWorthCents).not.toBe(
       checking.balanceCents + card.creditCard!.availableLimitCents,
     );
   });

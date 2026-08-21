@@ -18,17 +18,22 @@ export function ConsolidatedBalanceCard({
   activeAccountCount,
   valuesHidden,
 }: ConsolidatedBalanceCardProps) {
-  const { accountsBalanceCents, openInvoicesCents, netCents } = consolidated;
+  const { assetsBalanceCents, openInvoicesCents, netWorthCents } = consolidated;
 
   return (
     <Card title="Patrimônio" action={<HideValuesToggle hidden={valuesHidden} />}>
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-1">
-          <p className="text-2xs text-texto-fraco font-semibold uppercase">Saldo líquido</p>
+          <p
+            className="text-2xs text-texto-fraco font-semibold uppercase"
+            title="Saldo em contas menos faturas de cartão em aberto. Limite de crédito não entra: é crédito do banco, não seu."
+          >
+            Saldo líquido
+          </p>
           <Amount
-            cents={netCents}
+            cents={netWorthCents}
             size="hero"
-            tone={netCents < 0 ? "alerta" : "neutro"}
+            tone={netWorthCents < 0 ? "alerta" : "neutro"}
             sign="negative"
             showCurrency
             masked={valuesHidden}
@@ -43,9 +48,9 @@ export function ConsolidatedBalanceCard({
             <dt className="text-2xs text-texto-fraco font-semibold uppercase">Saldo em contas</dt>
             <dd>
               <Amount
-                cents={accountsBalanceCents}
+                cents={assetsBalanceCents}
                 size="md"
-                tone={accountsBalanceCents < 0 ? "alerta" : "entrada"}
+                tone={assetsBalanceCents < 0 ? "alerta" : "entrada"}
                 sign="negative"
                 masked={valuesHidden}
               />

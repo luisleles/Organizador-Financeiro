@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   accountBalanceCents,
+  assetsBalanceCents,
   buildBalanceSeries,
   calculateBalanceCents,
   consolidateBalances,
+  liabilitiesBalanceCents,
+  netWorthCents,
   openingBalanceCents,
   sumMovementCents,
 } from "./account.balance";
@@ -48,37 +51,64 @@ describe("consolidateBalances", () => {
   const checking = (balanceCents: number) => ({ balanceCents, isCreditCard: false });
   const card = (balanceCents: number) => ({ balanceCents, isCreditCard: true });
 
-  it("separa saldo em contas de faturas em aberto", () => {
+  it("separa ativo de passivo em faturas em aberto", () => {
     const totals = consolidateBalances([checking(320000), checking(500000), card(-38050)]);
 
     expect(totals).toEqual({
-      accountsBalanceCents: 820000,
+      assetsBalanceCents: 820000,
+      liabilitiesBalanceCents: -38050,
+      netWorthCents: 781950,
       openInvoicesCents: 38050,
-      netCents: 781950,
     });
   });
 
-  it("conta corrente negativa reduz o saldo em contas, e não vira fatura", () => {
+  it("conta corrente negativa reduz o ativo, e não vira fatura", () => {
     const totals = consolidateBalances([checking(-11687), checking(320000)]);
 
-    expect(totals.accountsBalanceCents).toBe(308313);
+    expect(totals.assetsBalanceCents).toBe(308313);
+    expect(totals.liabilitiesBalanceCents).toBe(0);
     expect(totals.openInvoicesCents).toBe(0);
   });
 
-  it("cartão pago a mais entra como dinheiro disponível, não como fatura negativa", () => {
+  it("cartão pago a mais entra como ativo, nunca como passivo positivo", () => {
     const totals = consolidateBalances([checking(300000), card(44518)]);
 
-    expect(totals.accountsBalanceCents).toBe(344518);
+    expect(totals.assetsBalanceCents).toBe(344518);
+    expect(totals.liabilitiesBalanceCents).toBe(0);
     expect(totals.openInvoicesCents).toBe(0);
-    expect(totals.netCents).toBe(344518);
+    expect(totals.netWorthCents).toBe(344518);
   });
 
-  it("trata uma carteira zerada como nem saldo nem fatura", () => {
+  it("trata uma carteira zerada como nem ativo nem passivo", () => {
     expect(consolidateBalances([checking(0)])).toEqual({
-      accountsBalanceCents: 0,
+      assetsBalanceCents: 0,
+      liabilitiesBalanceCents: 0,
+      netWorthCents: 0,
       openInvoicesCents: 0,
-      netCents: 0,
     });
+  });
+});
+
+describe("assetsBalanceCents, liabilitiesBalanceCents e netWorthCents", () => {
+  const checking = (balanceCents: number) => ({ balanceCents, isCreditCard: false });
+  const card = (balanceCents: number) => ({ balanceCents, isCreditCard: true });
+
+  it("assetsBalanceCents soma só as contas ASSET, mais o crédito de um cartão pago a mais", () => {
+    expect(assetsBalanceCents([checking(320000), card(-38050)])).toBe(320000);
+    expect(assetsBalanceCents([checking(320000), card(44518)])).toBe(364518);
+  });
+
+  it("liabilitiesBalanceCents nunca passa de zero, mesmo com cartão pago a mais", () => {
+    expect(liabilitiesBalanceCents([card(-38050)])).toBe(-38050);
+    expect(liabilitiesBalanceCents([card(44518)])).toBe(0);
+  });
+
+  it("netWorthCents é a soma exata das duas funções", () => {
+    const entries = [checking(320000), checking(500000), card(-38050)];
+    expect(netWorthCents(entries)).toBe(
+      assetsBalanceCents(entries) + liabilitiesBalanceCents(entries),
+    );
+    expect(netWorthCents(entries)).toBe(781950);
   });
 });
 
@@ -107,8 +137,8 @@ describe("transferência entre contas próprias", () => {
       { balanceCents: calculateBalanceCents(SAVINGS_INITIAL, [incomingLeg]), isCreditCard: false },
     ]);
 
-    expect(after.netCents).toBe(before.netCents);
-    expect(after.netCents).toBe(820000);
+    expect(after.netWorthCents).toBe(before.netWorthCents);
+    expect(after.netWorthCents).toBe(820000);
   });
 
   it("também não muda o total quando a origem fica negativa", () => {
@@ -119,8 +149,8 @@ describe("transferência entre contas próprias", () => {
       { balanceCents: calculateBalanceCents(SAVINGS_INITIAL, [incomingLeg]), isCreditCard: false },
     ]);
 
-    expect(after.netCents).toBe(SAVINGS_INITIAL);
-    expect(after.accountsBalanceCents).toBe(SAVINGS_INITIAL);
+    expect(after.netWorthCents).toBe(SAVINGS_INITIAL);
+    expect(after.assetsBalanceCents).toBe(SAVINGS_INITIAL);
   });
 });
 

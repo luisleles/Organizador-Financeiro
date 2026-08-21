@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
+import { ConsolidatedBalanceCard } from "@/components/accounts/consolidated-balance-card";
 import { LazyBalanceEvolutionChart, LazyCategoryBars } from "@/components/charts/lazy-chart";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
@@ -83,94 +84,82 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
         </aside>
       )}
 
-      <Card title="Patrimônio">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex flex-col gap-1">
-            <p className="text-2xs text-texto-fraco font-semibold uppercase">Saldo líquido</p>
-            <Amount
-              cents={consolidated.netCents}
-              size="hero"
-              tone={consolidated.netCents < 0 ? "alerta" : "neutro"}
-              sign="negative"
-              showCurrency
-              masked={valuesHidden}
-            />
-            <p className="text-texto-fraco text-xs">
-              Contas {formatShort(consolidated.accountsBalanceCents)} · Faturas em aberto{" "}
-              {formatShort(consolidated.openInvoicesCents)}
-            </p>
-          </div>
+      <ConsolidatedBalanceCard
+        consolidated={consolidated}
+        activeAccountCount={accounts.length}
+        valuesHidden={valuesHidden}
+      />
 
-          <ul className="flex flex-1 flex-col gap-1 lg:max-w-md">
-            {accounts.map((account) => (
-              <li key={account.id} className="flex flex-col">
-                <div className="border-linha flex items-center gap-3 border-b pb-1">
-                  <span
-                    aria-hidden
-                    className="size-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: account.color }}
+      <Card title="Saldo por conta">
+        <ul className="flex flex-col gap-1">
+          {accounts.map((account) => (
+            <li key={account.id} className="flex flex-col">
+              <div className="border-linha flex items-center gap-3 border-b pb-1">
+                <span
+                  aria-hidden
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: account.color }}
+                />
+                <Link
+                  href={`/contas/${account.id}`}
+                  prefetch={false}
+                  className="link-acao text-texto text-sm hover:underline hover:underline-offset-4"
+                >
+                  {account.name}
+                </Link>
+                {account.isCreditCard && <Badge tone="previsto">cartão</Badge>}
+                <span className="ml-auto flex flex-col items-end">
+                  <Amount
+                    cents={account.totalBalanceCents}
+                    size="xs"
+                    tone={account.totalBalanceCents < 0 ? "alerta" : "neutro"}
+                    sign="negative"
+                    masked={valuesHidden}
                   />
-                  <Link
-                    href={`/contas/${account.id}`}
-                    prefetch={false}
-                    className="link-acao text-texto text-sm hover:underline hover:underline-offset-4"
-                  >
-                    {account.name}
-                  </Link>
-                  {account.isCreditCard && <Badge tone="previsto">cartão</Badge>}
-                  <span className="ml-auto flex flex-col items-end">
-                    <Amount
-                      cents={account.totalBalanceCents}
-                      size="xs"
-                      tone={account.totalBalanceCents < 0 ? "alerta" : "neutro"}
-                      sign="negative"
-                      masked={valuesHidden}
-                    />
-                    {account.buckets.length > 0 && (
-                      <span className="text-texto-fraco text-xs">
-                        livre{" "}
-                        <Amount
-                          cents={account.availableBalanceCents}
-                          size="xs"
-                          tone="neutro"
-                          sign="negative"
-                          masked={valuesHidden}
-                        />
-                      </span>
-                    )}
-                  </span>
-                </div>
-
-                {account.buckets.map((bucket) => (
-                  <div
-                    key={bucket.id}
-                    className="border-linha flex items-center gap-2 border-b py-1 pl-6"
-                  >
-                    <span aria-hidden className="text-texto-fraco text-xs">
-                      ↳
-                    </span>
-                    <Link
-                      href={`/contas/${bucket.id}`}
-                      prefetch={false}
-                      className="link-acao text-texto-fraco text-xs hover:underline hover:underline-offset-4"
-                    >
-                      {bucket.name}
-                    </Link>
-                    <span className="ml-auto">
+                  {account.buckets.length > 0 && (
+                    <span className="text-texto-fraco text-xs">
+                      livre{" "}
                       <Amount
-                        cents={bucket.balanceCents}
+                        cents={account.availableBalanceCents}
                         size="xs"
-                        tone="entrada"
-                        sign="never"
+                        tone="neutro"
+                        sign="negative"
                         masked={valuesHidden}
                       />
                     </span>
-                  </div>
-                ))}
-              </li>
-            ))}
-          </ul>
-        </div>
+                  )}
+                </span>
+              </div>
+
+              {account.buckets.map((bucket) => (
+                <div
+                  key={bucket.id}
+                  className="border-linha flex items-center gap-2 border-b py-1 pl-6"
+                >
+                  <span aria-hidden className="text-texto-fraco text-xs">
+                    ↳
+                  </span>
+                  <Link
+                    href={`/contas/${bucket.id}`}
+                    prefetch={false}
+                    className="link-acao text-texto-fraco text-xs hover:underline hover:underline-offset-4"
+                  >
+                    {bucket.name}
+                  </Link>
+                  <span className="ml-auto">
+                    <Amount
+                      cents={bucket.balanceCents}
+                      size="xs"
+                      tone="entrada"
+                      sign="never"
+                      masked={valuesHidden}
+                    />
+                  </span>
+                </div>
+              ))}
+            </li>
+          ))}
+        </ul>
       </Card>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -359,14 +348,6 @@ function FlowCard({ label, variation, tone, masked, inverted = false, footer }: 
 function formatPercent(value: number): string {
   const formatted = value.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
   return `${value > 0 ? "+" : ""}${formatted}%`;
-}
-
-function formatShort(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  });
 }
 
 function toSearchParams(record: Record<string, string | string[] | undefined>): URLSearchParams {
