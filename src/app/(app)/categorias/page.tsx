@@ -15,6 +15,12 @@ import { UnarchiveButton } from "@/components/categories/unarchive-button";
 import { listTags } from "@/server/tags/tag.service";
 
 /**
+ * A árvore vem do banco e muda fora do build. Sem isto, o Next pré-renderiza a página uma
+ * vez e serve categoria velha para sempre em produção.
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * A página lê o banco sem tocar em nenhuma API dinâmica, então o Next a prerenderizaria no
  * build e serviria dados congelados até alguma mutação revalidar. Num app local, o banco
  * muda por fora (seed, script, Prisma Studio) e a tela precisa refletir isso.

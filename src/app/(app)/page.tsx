@@ -189,7 +189,7 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
                   sign="never"
                   masked={valuesHidden}
                 />{" "}
-                de rendimento de caixinha.
+                de rendimento.
               </>
             ) : undefined
           }
