@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
+import { toISODate } from "@/lib/date";
 import { Table, TableCell, TableGroupRow, TableHeadCell } from "@/components/ui/table";
 import { cn } from "@/lib/cn";
 import { formatDate } from "@/lib/date";
@@ -362,10 +363,6 @@ function rowToDefaults(row: TransactionRow): TransactionDefaults {
     installments: "1",
     installmentScope: row.installmentGroupId ? "SINGLE" : "",
   };
-}
-
-function toISODate(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(date);
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

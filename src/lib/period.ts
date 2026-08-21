@@ -69,10 +69,7 @@ function toParts(isoDate: string): DateParts {
   return { year, month, day };
 }
 
-export function toISODate(instant: Date): string {
-  const { year, month, day } = toDateParts(instant);
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
+export { toISODate } from "./date";
 
 /** Parâmetro ausente ou corrompido cai no padrão em vez de quebrar a página. */
 export function parsePeriod(params: ReadableParams): Period {

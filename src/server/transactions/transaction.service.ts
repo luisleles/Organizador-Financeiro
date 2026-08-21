@@ -1,5 +1,5 @@
 import type { AccountClass, AccountType, Prisma, TransactionType } from "@prisma/client";
-import { fromZonedParts, toDateParts } from "@/lib/date";
+import { fromISODate, toISODate } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import {
   BUCKET_RULE_MESSAGES,
@@ -119,7 +119,19 @@ export async function getTransaction(transactionId: string): Promise<Transaction
   return row ? toRow(row) : null;
 }
 
-export async function createTransaction(input: TransactionInput): Promise<string> {
+/**
+ * De onde veio o lançamento. O gerador de recorrências grava aqui a chave da ocorrência,
+ * e o índice único de `[provider, externalId]` é o que impede a segunda rodada de duplicar.
+ */
+export type TransactionOrigin = {
+  provider: string;
+  externalId: string;
+};
+
+export async function createTransaction(
+  input: TransactionInput,
+  origin?: TransactionOrigin,
+): Promise<string> {
   const userId = await requireUserId();
   return prisma.$transaction(async (tx) => {
     const account = await findAccount(tx, userId, input.accountId);
@@ -147,6 +159,7 @@ export async function createTransaction(input: TransactionInput): Promise<string
           date,
           signedAmount(input.type, input.amountCents),
           null,
+          origin,
         ),
         select: { id: true },
       });
@@ -174,6 +187,7 @@ export async function createTransaction(input: TransactionInput): Promise<string
             shiftPurchaseDate(date, index),
             signedAmount(input.type, amounts[index]),
             invoice.id,
+            origin,
           ),
           description:
             installmentCount > 1
@@ -716,6 +730,7 @@ function transactionData(
   date: Date,
   amountCents: number,
   invoiceId: string | null,
+  origin?: TransactionOrigin,
 ): Prisma.TransactionCreateInput {
   return {
     user: { connect: { id: userId } },
@@ -727,7 +742,8 @@ function transactionData(
     amountCents,
     type: input.type,
     notes: input.notes,
-    provider: "manual",
+    provider: origin?.provider ?? "manual",
+    externalId: origin?.externalId,
     tags: { connect: input.tagIds.map((id) => ({ id })) },
   };
 }
@@ -836,16 +852,6 @@ function toRow(row: RawRow): TransactionRow {
 
 function signedAmount(type: "INCOME" | "EXPENSE", magnitudeCents: number): number {
   return type === "EXPENSE" ? -magnitudeCents : magnitudeCents;
-}
-
-function fromISODate(isoDate: string): Date {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  return fromZonedParts({ year, month, day });
-}
-
-function toISODate(date: Date): string {
-  const { year, month, day } = toDateParts(date);
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function notFound(): TransactionServiceError {

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
+import { toISODate } from "@/lib/date";
 import { formatCentsForInput } from "@/lib/money";
 import { IDLE_ACTION_STATE } from "@/server/action-state";
 import { GOAL_COLORS, GOAL_ICONS } from "@/server/goals/goal.schema";
@@ -228,8 +229,4 @@ function GoalForm({
       </div>
     </form>
   );
-}
-
-function toISODate(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(date);
 }

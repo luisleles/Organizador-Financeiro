@@ -4,6 +4,7 @@ export type NavIconName =
   | "contas"
   | "orcamentos"
   | "metas"
+  | "recorrencias"
   | "categorias"
   | "relatorios"
   | "configuracoes";
@@ -35,6 +36,12 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/orcamentos", label: "Orçamentos", shortLabel: "Orçamento", icon: "orcamentos" },
       { href: "/metas", label: "Metas", shortLabel: "Metas", icon: "metas" },
+      {
+        href: "/recorrencias",
+        label: "Recorrências",
+        shortLabel: "Fixos",
+        icon: "recorrencias",
+      },
     ],
   },
   {

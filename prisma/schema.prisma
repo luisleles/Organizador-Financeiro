@@ -271,9 +271,27 @@ model RecurringRule {
   lastRunAt   DateTime?
   active      Boolean            @default(true)
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account   Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category  Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  overrides RecurringOverride[]
 
-  @@index([userId])
+  @@index([userId, active])
+}
+
+/// Ajuste de uma ocorrência futura específica: pular ou trocar o valor daquele dia.
+/// Só existe quando a pessoa mexeu — o padrão de toda ocorrência é seguir a regra.
+model RecurringOverride {
+  id String @id @default(cuid())
+
+  ruleId String
+
+  /// Meia-noite do dia da ocorrência, no calendário de São Paulo.
+  date        DateTime
+  skipped     Boolean  @default(false)
+  amountCents Int?
+
+  rule RecurringRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, date])
 }

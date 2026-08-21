@@ -1,4 +1,12 @@
-import { addMonths, fromZonedParts, toDateParts, type DateParts } from "@/lib/date";
+import {
+  addMonths,
+  clampToMonth,
+  daysBetween,
+  fromZonedParts,
+  isoDateKey,
+  toDateParts,
+  type DateParts,
+} from "@/lib/date";
 
 /**
  * Cartão de crédito não tem "saldo": tem fatura e limite. Este módulo é puro para que as
@@ -182,12 +190,12 @@ export function groupByInvoice<TEntry extends DatedEntry>(
   dueDay: number,
   now: Date = new Date(),
 ): InvoiceGroup<TEntry>[] {
-  const openKey = isoKey(cycleFor(toDateParts(now), closingDay, dueDay).closing);
+  const openKey = isoDateKey(cycleFor(toDateParts(now), closingDay, dueDay).closing);
   const groups = new Map<string, InvoiceGroup<TEntry>>();
 
   for (const entry of entries) {
     const { closing, due } = cycleFor(toDateParts(entry.date), closingDay, dueDay);
-    const key = isoKey(closing);
+    const key = isoDateKey(closing);
 
     const group = groups.get(key) ?? {
       key,
@@ -220,23 +228,4 @@ export function invoiceHistoryStart(
 function compareKeys(key: string, openKey: string): InvoiceStatus {
   if (key === openKey) return "aberta";
   return key < openKey ? "fechada" : "futura";
-}
-
-function isoKey(parts: DateParts): string {
-  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-}
-
-function daysInMonth(parts: DateParts): number {
-  return new Date(Date.UTC(parts.year, parts.month, 0)).getUTCDate();
-}
-
-function clampToMonth(month: DateParts, day: number): DateParts {
-  return { ...month, day: Math.min(day, daysInMonth(month)) };
-}
-
-/** Diferença em dias de calendário, sem depender de hora nem de fuso. */
-function daysBetween(from: DateParts, to: DateParts): number {
-  const fromMs = Date.UTC(from.year, from.month - 1, from.day);
-  const toMs = Date.UTC(to.year, to.month - 1, to.day);
-  return Math.round((toMs - fromMs) / 86_400_000);
 }

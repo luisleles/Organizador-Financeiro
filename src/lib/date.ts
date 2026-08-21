@@ -84,6 +84,46 @@ export function endOfMonthInZone(parts: DateParts): Date {
   return fromZonedParts({ ...parts, day: lastDay }, true);
 }
 
+/** Converte o `AAAA-MM-DD` que vem de um `<input type="date">` no instante correspondente. */
+export function fromISODate(isoDate: string): Date {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return fromZonedParts({ year, month, day });
+}
+
+export function daysInMonth(parts: DateParts): number {
+  return new Date(Date.UTC(parts.year, parts.month, 0)).getUTCDate();
+}
+
+/** Dia 31 num mês de 30 vira dia 30: a data existe, e é a intenção mais próxima. */
+export function clampToMonth(month: DateParts, day: number): DateParts {
+  return { ...month, day: Math.min(day, daysInMonth(month)) };
+}
+
+export function addDays(parts: DateParts, amount: number): DateParts {
+  const shifted = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + amount));
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+}
+
+/** Diferença em dias de calendário, sem depender de hora nem de fuso. */
+export function daysBetween(from: DateParts, to: DateParts): number {
+  const fromMs = Date.UTC(from.year, from.month - 1, from.day);
+  const toMs = Date.UTC(to.year, to.month - 1, to.day);
+  return Math.round((toMs - fromMs) / 86_400_000);
+}
+
+export function isoDateKey(parts: DateParts): string {
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+/** Formato que o `<input type="date">` entende, no calendário de São Paulo. */
+export function toISODate(instant: Date): string {
+  return isoDateKey(toDateParts(instant));
+}
+
 export function addMonths(parts: DateParts, amount: number): DateParts {
   const shifted = new Date(Date.UTC(parts.year, parts.month - 1 + amount, 1));
   return {

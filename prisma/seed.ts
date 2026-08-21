@@ -1,4 +1,10 @@
-import { AccountClass, AccountType, CategoryKind, TransactionType } from "@prisma/client";
+import {
+  AccountClass,
+  AccountType,
+  CategoryKind,
+  RecurringFrequency,
+  TransactionType,
+} from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { toCents } from "../src/lib/money";
 import { invoiceScheduleForPurchase } from "../src/server/accounts/account.credit-card";
@@ -598,6 +604,60 @@ async function allocateSeedCardTransactions(accountId: string) {
   }
 }
 
+/**
+ * As três recorrências que todo mundo tem. `lastRunAt` fica no fim do histórico semeado:
+ * o gerador não vai relançar o que o seed já criou, e passa a lançar do mês seguinte.
+ */
+async function seedRecurringRules(context: SeedContext, firstMonth: MonthWindow) {
+  const { userId, accounts } = context;
+  const inicio = utcDate(firstMonth.year, firstMonth.monthIndex, 1, 0);
+  const ultimaRodada = new Date();
+
+  await prisma.recurringRule.createMany({
+    data: [
+      {
+        userId,
+        accountId: accounts.nubank.id,
+        categoryId: categoryId(context, "Salário CLT"),
+        description: "Salário",
+        amountCents: toCents(7200),
+        type: TransactionType.INCOME,
+        frequency: RecurringFrequency.MONTHLY,
+        interval: 1,
+        dayOfMonth: 5,
+        startDate: inicio,
+        lastRunAt: ultimaRodada,
+      },
+      {
+        userId,
+        accountId: accounts.nubank.id,
+        categoryId: categoryId(context, "Aluguel"),
+        description: "Aluguel",
+        amountCents: toCents(1800),
+        type: TransactionType.EXPENSE,
+        frequency: RecurringFrequency.MONTHLY,
+        interval: 1,
+        dayOfMonth: 10,
+        startDate: inicio,
+        lastRunAt: ultimaRodada,
+      },
+      {
+        userId,
+        accountId: accounts.cartaoInter.id,
+        categoryId: categoryId(context, "Streaming"),
+        description: "Assinatura de streaming",
+        amountCents: toCents(55.9),
+        type: TransactionType.EXPENSE,
+        frequency: RecurringFrequency.MONTHLY,
+        interval: 1,
+        dayOfMonth: 22,
+        startDate: inicio,
+        lastRunAt: ultimaRodada,
+      },
+    ],
+  });
+}
+
 async function seedBudgets(context: SeedContext, currentMonth: MonthWindow) {
   const month = utcDate(currentMonth.year, currentMonth.monthIndex, 1, 0);
 
@@ -793,6 +853,7 @@ async function main() {
   const currentMonth = months[months.length - 1];
   await seedBudgets(context, currentMonth);
   await seedGoals(context, currentMonth);
+  await seedRecurringRules(context, months[0]);
 
   const transactionCount = await prisma.transaction.count();
   console.log(`Seed concluído: ${transactionCount} transações em 4 contas, 8 meses de histórico.`);
