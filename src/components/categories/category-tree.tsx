@@ -191,7 +191,7 @@ function Row({
       onDragStart={() => onDragStart(node.id)}
       onDragEnd={onDragEnd}
       className={cn(
-        "border-linha hover:bg-fundo flex items-center gap-3 rounded-md border px-3 py-2",
+        "border-linha hover:bg-fundo flex flex-wrap items-center gap-3 rounded-md border px-3 py-2",
         dragging === node.id && "opacity-50",
         pending && "pointer-events-none",
       )}
