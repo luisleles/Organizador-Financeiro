@@ -6,6 +6,7 @@ export type NavIconName =
   | "metas"
   | "recorrencias"
   | "categorias"
+  | "importar"
   | "relatorios"
   | "configuracoes";
 
@@ -48,6 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Estrutura",
     items: [
       { href: "/categorias", label: "Categorias", shortLabel: "Categorias", icon: "categorias" },
+      { href: "/importar", label: "Importar", shortLabel: "Importar", icon: "importar" },
       { href: "/relatorios", label: "Relatórios", shortLabel: "Relatórios", icon: "relatorios" },
       {
         href: "/configuracoes",

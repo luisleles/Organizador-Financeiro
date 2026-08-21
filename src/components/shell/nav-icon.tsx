@@ -9,6 +9,7 @@ const PATHS: Record<NavIconName, ReactNode> = {
   metas: <path d="M10 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM10 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />,
   recorrencias: <path d="M4 8a6 6 0 0 1 10-3M16 12a6 6 0 0 1-10 3M14 5h2.5V2.5M6 15H3.5v2.5" />,
   categorias: <path d="M4 4h6l6 6-6 6-6-6zM7 7h.01" />,
+  importar: <path d="M10 3v9M6.5 8.5 10 12l3.5-3.5M4 15h12" />,
   relatorios: <path d="M3 16V9M8 16V4M13 16v-5M18 16v-8" />,
   configuracoes: <path d="M3 6h14M3 13h14M8 4v4M13 11v4" />,
 };
