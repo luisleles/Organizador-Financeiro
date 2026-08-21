@@ -9,14 +9,10 @@ import { Card } from "@/components/ui/card";
 import { Table, TableCell, TableHeadCell } from "@/components/ui/table";
 import { formatDate } from "@/lib/date";
 import { parsePeriod, resolvePeriod } from "@/lib/period";
-import { consolidateBalances } from "@/server/accounts/account.balance";
 import { readValuesHidden } from "@/server/preferences";
+import { listAccounts } from "@/server/accounts/account.service";
 import { currentMonth, getMonthlyBudgets } from "@/server/budgets/budget.service";
-import {
-  flattenAccounts,
-  getDashboard,
-  listAccountBalances,
-} from "@/server/reports/report.service";
+import { getDashboard } from "@/server/reports/report.service";
 import type { Variation } from "@/server/reports/report.aggregations";
 
 type InicioPageProps = {
@@ -27,24 +23,14 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
   const params = toSearchParams(await searchParams);
   const period = resolvePeriod(parsePeriod(params));
 
-  const [dashboard, accounts, budgets, valuesHidden] = await Promise.all([
+  const [dashboard, { accounts, consolidated }, budgets, valuesHidden] = await Promise.all([
     getDashboard(period),
-    listAccountBalances(),
+    listAccounts(),
     getMonthlyBudgets(currentMonth()),
     readValuesHidden(),
   ]);
 
   const overBudget = budgets.rows.filter((row) => row.progress.status === "estourado");
-
-  // Achata a árvore para consolidar: cada conta entra uma vez, com o próprio saldo. A
-  // caixinha soma como qualquer outra conta, e o disponível da mãe já exclui o que está
-  // nela — não há dupla contagem.
-  const consolidated = consolidateBalances(
-    flattenAccounts(accounts).map((account) => ({
-      balanceCents: account.balanceCents,
-      isCreditCard: account.isCreditCard,
-    })),
-  );
 
   const expensesTotal = dashboard.categories.reduce(
     (total, category) => total + category.totalCents,
@@ -107,7 +93,7 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
                 >
                   {account.name}
                 </Link>
-                {account.isCreditCard && <Badge tone="previsto">cartão</Badge>}
+                {account.creditCard && <Badge tone="previsto">cartão</Badge>}
                 <span className="ml-auto flex flex-col items-end">
                   <Amount
                     cents={account.totalBalanceCents}
@@ -124,6 +110,26 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
                         size="xs"
                         tone="neutro"
                         sign="negative"
+                        masked={valuesHidden}
+                      />
+                    </span>
+                  )}
+                  {account.creditCard && (
+                    <span className="text-texto-fraco text-xs">
+                      disponível{" "}
+                      <Amount
+                        cents={account.creditCard.availableLimitCents}
+                        size="xs"
+                        tone="neutro"
+                        sign="negative"
+                        masked={valuesHidden}
+                      />{" "}
+                      de{" "}
+                      <Amount
+                        cents={account.creditCard.creditLimitCents}
+                        size="xs"
+                        tone="neutro"
+                        sign="never"
                         masked={valuesHidden}
                       />
                     </span>
