@@ -8,7 +8,11 @@ import {
   consolidateBalances,
   openingBalanceCents,
 } from "./account.balance";
-import { invoiceScheduleForPurchase } from "./account.credit-card";
+import {
+  invoiceCycleStatus,
+  invoicePaymentStatus,
+  invoiceScheduleForPurchase,
+} from "./account.credit-card";
 import type { AccountInput } from "./account.schema";
 import type {
   AccountDetail,
@@ -20,10 +24,7 @@ import type {
 } from "./account.types";
 
 export type AccountErrorCode =
-  | "NOT_FOUND"
-  | "HAS_TRANSACTIONS"
-  | "INVALID_TYPE_CHANGE"
-  | "HAS_BUCKETS";
+  "NOT_FOUND" | "HAS_TRANSACTIONS" | "INVALID_TYPE_CHANGE" | "HAS_BUCKETS";
 
 export class AccountServiceError extends Error {
   constructor(
@@ -340,10 +341,11 @@ function toCreditCardStatus(
     (invoice) => invoice.referenceMonth.getTime() === current.referenceMonth.getTime(),
   );
   const currentTotal = sumInvoice(currentInvoice?.transactions ?? []);
-  const committedCents = Math.abs(
-    details.invoices
-      .filter((invoice) => invoice.status !== "PAID")
-      .reduce((total, invoice) => total + sumInvoice(invoice.transactions), 0),
+  // Cada fatura compromete o limite só pelo que ainda deve: uma paga ou paga a mais não
+  // tira nem devolve limite, então entra com zero em vez de exigir um status à parte.
+  const committedCents = details.invoices.reduce(
+    (total, invoice) => total + Math.max(0, -sumInvoice(invoice.transactions)),
+    0,
   );
   const availableLimitCents = details.creditLimitCents - committedCents;
 
@@ -370,15 +372,17 @@ function toCreditCardStatus(
 function toInvoice(
   invoice: NonNullable<AccountWithCard["creditCardDetails"]>["invoices"][number],
 ): AccountInvoice {
+  const totalCents = sumInvoice(invoice.transactions);
   return {
     id: invoice.id,
     referenceMonth: invoice.referenceMonth,
     closingDate: invoice.closingDate,
     dueDate: invoice.dueDate,
-    status: invoice.status,
+    cycleStatus: invoiceCycleStatus(invoice.closingDate),
+    paymentStatus: invoicePaymentStatus(totalCents, invoice.paidAt),
     paidAt: invoice.paidAt,
     paymentTransferGroupId: invoice.paymentTransferGroupId,
-    totalCents: sumInvoice(invoice.transactions),
+    totalCents,
     entries: invoice.transactions.map(toEntry),
   };
 }

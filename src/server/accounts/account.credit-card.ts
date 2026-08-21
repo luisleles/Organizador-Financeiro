@@ -214,6 +214,43 @@ export function groupByInvoice<TEntry extends DatedEntry>(
   return [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
 }
 
+export type InvoiceCycleStatus = "OPEN" | "CLOSED";
+
+/**
+ * Se uma fatura aceita lançamento novo. É puramente temporal — o fechamento é a única
+ * fronteira — e nunca olha para pagamento: uma fatura paga antecipadamente continua aceitando
+ * compra normalmente até fechar. Esta é a única função que decide alocação; nada além dela
+ * deve comparar data com fechamento para essa finalidade.
+ */
+export function isOpenForPosting(closingDate: Date, now: Date = new Date()): boolean {
+  return isoDateKey(toDateParts(now)) <= isoDateKey(toDateParts(closingDate));
+}
+
+export function invoiceCycleStatus(closingDate: Date, now: Date = new Date()): InvoiceCycleStatus {
+  return isOpenForPosting(closingDate, now) ? "OPEN" : "CLOSED";
+}
+
+export type InvoicePaymentStatus = "UNPAID" | "PARTIALLY_PAID" | "PAID" | "OVERPAID";
+
+/**
+ * O pagamento não é um valor guardado à parte: é o que sobra da soma de tudo que já entrou
+ * na fatura, incluindo a própria transferência de pagamento — `netBalanceCents` é esse
+ * total, no mesmo sinal do extrato. `paidAt` só marca o fato de que em algum momento a
+ * fatura foi zerada por um pagamento; sem ele, a fatura nunca foi paga, mesmo que o saldo
+ * bata zero por coincidência (um estorno que cancela a compra, por exemplo). Lançar uma
+ * compra nova numa fatura já paga e ainda aberta não desfaz `paidAt` — só empurra o saldo
+ * de volta para negativo, e o status cai sozinho para `PARTIALLY_PAID`.
+ */
+export function invoicePaymentStatus(
+  netBalanceCents: number,
+  paidAt: Date | null,
+): InvoicePaymentStatus {
+  if (paidAt === null) return "UNPAID";
+  if (netBalanceCents > 0) return "OVERPAID";
+  if (netBalanceCents === 0) return "PAID";
+  return "PARTIALLY_PAID";
+}
+
 /** Início do recorte de histórico: o fechamento de `cyclesBack` faturas atrás. */
 export function invoiceHistoryStart(
   closingDay: number,

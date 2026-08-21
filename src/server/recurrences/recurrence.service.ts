@@ -381,7 +381,6 @@ async function projectedRecurrences(
 async function projectedInvoices(userId: string, from: Date, to: Date): Promise<ProjectionEvent[]> {
   const invoices = await prisma.invoice.findMany({
     where: {
-      status: { in: ["OPEN", "CLOSED", "PARTIALLY_PAID", "OVERDUE"] },
       dueDate: { gte: from, lte: to },
       creditCardDetails: { account: { userId, archived: false } },
     },

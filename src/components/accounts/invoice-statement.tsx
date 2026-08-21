@@ -1,24 +1,36 @@
+import type { ReactNode } from "react";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableCell, TableGroupRow, TableHeadCell } from "@/components/ui/table";
 import { formatDate } from "@/lib/date";
-import type { InvoiceStatus } from "@prisma/client";
+import type {
+  InvoiceCycleStatus,
+  InvoicePaymentStatus,
+} from "@/server/accounts/account.credit-card";
 import type { AccountInvoice } from "@/server/accounts/account.types";
 
-const STATUS_TONE: Record<InvoiceStatus, "saida" | "neutro" | "previsto"> = {
+const CYCLE_TONE: Record<InvoiceCycleStatus, "saida" | "neutro"> = {
   OPEN: "saida",
   CLOSED: "neutro",
-  PAID: "neutro",
-  PARTIALLY_PAID: "previsto",
-  OVERDUE: "saida",
 };
 
-const STATUS_LABEL: Record<InvoiceStatus, string> = {
+const CYCLE_LABEL: Record<InvoiceCycleStatus, string> = {
   OPEN: "aberta",
   CLOSED: "fechada",
-  PAID: "paga",
+};
+
+const PAYMENT_TONE: Record<InvoicePaymentStatus, "entrada" | "neutro" | "previsto" | "alerta"> = {
+  UNPAID: "neutro",
+  PARTIALLY_PAID: "previsto",
+  PAID: "entrada",
+  OVERPAID: "alerta",
+};
+
+const PAYMENT_LABEL: Record<InvoicePaymentStatus, string> = {
+  UNPAID: "não paga",
   PARTIALLY_PAID: "parcialmente paga",
-  OVERDUE: "atrasada",
+  PAID: "paga",
+  OVERPAID: "paga a mais",
 };
 
 type InvoiceStatementProps = {
@@ -52,7 +64,13 @@ export function InvoiceStatement({ invoices, accountName, valuesHidden }: Invoic
                 <span className="text-texto-fraco font-normal normal-case">
                   vence {formatDate(invoice.dueDate)}
                 </span>
-                <Badge tone={STATUS_TONE[invoice.status]}>{STATUS_LABEL[invoice.status]}</Badge>
+                <Badge tone={CYCLE_TONE[invoice.cycleStatus]}>
+                  {CYCLE_LABEL[invoice.cycleStatus]}
+                </Badge>
+                <Badge tone={PAYMENT_TONE[invoice.paymentStatus]}>
+                  {PAYMENT_LABEL[invoice.paymentStatus]}
+                </Badge>
+                {paymentNote(invoice, valuesHidden)}
               </span>
             }
             total={<Amount cents={invoice.totalCents} size="sm" masked={valuesHidden} />}
@@ -80,4 +98,28 @@ export function InvoiceStatement({ invoices, accountName, valuesHidden }: Invoic
       ))}
     </Table>
   );
+}
+
+/**
+ * Só aparece nos dois casos em que o saldo sozinho engana: paga e ainda aberta esconde que
+ * já entrou lançamento novo depois do pagamento, e paga a mais esconde o crédito que sobrou.
+ */
+function paymentNote(invoice: AccountInvoice, masked: boolean): ReactNode {
+  if (invoice.paymentStatus === "PARTIALLY_PAID" && invoice.paidAt) {
+    return (
+      <span className="text-texto-fraco font-normal normal-case">
+        paga em {formatDate(invoice.paidAt)} —{" "}
+        <Amount cents={-invoice.totalCents} size="xs" sign="never" masked={masked} /> lançados
+        depois
+      </span>
+    );
+  }
+  if (invoice.paymentStatus === "OVERPAID") {
+    return (
+      <span className="text-texto-fraco font-normal normal-case">
+        <Amount cents={invoice.totalCents} size="xs" sign="never" masked={masked} /> de crédito
+      </span>
+    );
+  }
+  return null;
 }

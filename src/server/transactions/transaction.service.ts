@@ -11,6 +11,7 @@ import { resolveCategoryForDescription } from "@/server/categories/category.serv
 import { requireUserId } from "@/server/current-user";
 import {
   invoiceScheduleForPurchase,
+  isOpenForPosting,
   shiftInvoiceSchedule,
   shiftPurchaseDate,
   splitInstallmentCents,
@@ -32,7 +33,7 @@ export type TransactionErrorCode =
   | "NOT_A_TRANSFER"
   | "CREDIT_CARD_AS_SOURCE"
   | "CREDIT_CARD_TRANSFER_FORBIDDEN"
-  | "PAID_INVOICE_IMMUTABLE"
+  | "CLOSED_INVOICE_IMMUTABLE"
   | "INVOICE_NOT_FOUND"
   | "INVOICE_NOT_PAYABLE"
   | "INVALID_PAYMENT_SOURCE"
@@ -171,12 +172,13 @@ export async function createTransaction(
     const amounts = splitInstallmentCents(input.amountCents, installmentCount);
     let schedule = invoiceScheduleForPurchase(date, details.closingDay, details.dueDay);
     let firstId = "";
+    const now = new Date();
 
     for (let index = 0; index < amounts.length; index += 1) {
       if (index > 0) {
         schedule = shiftInvoiceSchedule(schedule, 1, details.closingDay, details.dueDay);
       }
-      const invoice = await ensureOpenInvoice(tx, details, schedule);
+      const invoice = await ensureOpenInvoice(tx, details, schedule, now);
       schedule = invoice.schedule;
       const number = index + 1;
       const created = await tx.transaction.create({
@@ -214,7 +216,7 @@ export async function updateTransaction(
   await prisma.$transaction(async (tx) => {
     const existing = await tx.transaction.findFirst({
       where: { id: transactionId, userId },
-      include: { invoice: { select: { status: true } } },
+      include: { invoice: { select: { closingDate: true } } },
     });
     if (!existing) throw notFound();
     if (existing.transferGroupId) {
@@ -223,7 +225,8 @@ export async function updateTransaction(
         "Esta linha faz parte de uma transferência e não pode ser editada como lançamento.",
       );
     }
-    assertInvoiceMutable(existing.invoice?.status);
+    const now = new Date();
+    assertInvoiceOpenForEdit(existing.invoice?.closingDate, now);
 
     const rows =
       input.installmentScope === "FUTURE" &&
@@ -236,11 +239,11 @@ export async function updateTransaction(
               installmentNumber: { gte: existing.installmentNumber },
             },
             orderBy: { installmentNumber: "asc" },
-            include: { invoice: { select: { status: true } } },
+            include: { invoice: { select: { closingDate: true } } },
           })
         : [existing];
 
-    for (const row of rows) assertInvoiceMutable(row.invoice?.status);
+    for (const row of rows) assertInvoiceOpenForEdit(row.invoice?.closingDate, now);
 
     const account = await findAccount(tx, userId, input.accountId);
     assertBucketEntryAllowed(account, input.type, signedAmount(input.type, input.amountCents));
@@ -270,6 +273,7 @@ export async function updateTransaction(
           tx,
           requireCardDetails(account.creditCardDetails),
           schedule!,
+          now,
         );
         invoiceId = resolvedInvoice.id;
         schedule = resolvedInvoice.schedule;
@@ -306,9 +310,10 @@ export async function deleteTransactions(
   return prisma.$transaction(async (tx) => {
     const selected = await tx.transaction.findMany({
       where: { id: { in: [...transactionIds] }, userId },
-      include: { invoice: { select: { status: true } } },
+      include: { invoice: { select: { closingDate: true } } },
     });
-    for (const row of selected) assertInvoiceMutable(row.invoice?.status);
+    const now = new Date();
+    for (const row of selected) assertInvoiceOpenForEdit(row.invoice?.closingDate, now);
 
     const ids = new Set(selected.map((row) => row.id));
     if (installmentScope === "FUTURE") {
@@ -320,10 +325,10 @@ export async function deleteTransactions(
             installmentGroupId: row.installmentGroupId,
             installmentNumber: { gte: row.installmentNumber },
           },
-          include: { invoice: { select: { status: true } } },
+          include: { invoice: { select: { closingDate: true } } },
         });
         for (const installment of future) {
-          assertInvoiceMutable(installment.invoice?.status);
+          assertInvoiceOpenForEdit(installment.invoice?.closingDate, now);
           ids.add(installment.id);
         }
       }
@@ -499,9 +504,6 @@ export async function payInvoice(
     if (!invoice) {
       throw new TransactionServiceError("INVOICE_NOT_FOUND", "Fatura não encontrada.");
     }
-    if (invoice.status === "PAID") {
-      throw new TransactionServiceError("INVOICE_NOT_PAYABLE", "Esta fatura já está paga.");
-    }
 
     const source = await findAccount(tx, userId, fromAccountId);
     if (source.class === "LIABILITY") {
@@ -557,12 +559,14 @@ export async function payInvoice(
       ],
     });
 
-    const paid = amountCents === outstandingCents;
+    // `paidAt` só avança quando este pagamento zera o saldo em aberto: um pagamento parcial
+    // não apaga a marca de uma fatura que já foi paga por inteiro antes, porque foi essa
+    // marca que passou a valer quando um lançamento novo chegou depois do pagamento.
+    const settles = amountCents === outstandingCents;
     await tx.invoice.update({
       where: { id: invoice.id },
       data: {
-        status: paid ? "PAID" : "PARTIALLY_PAID",
-        paidAt: paid ? date : null,
+        ...(settles ? { paidAt: date } : {}),
         paymentTransferGroupId: transferGroupId,
       },
     });
@@ -689,35 +693,34 @@ function requireCardDetails(details: CardDetails | null): CardDetails {
   return details;
 }
 
+/**
+ * Em qual fatura um lançamento cai: a que fecha na data da compra, desde que ainda esteja
+ * aberta agora — nunca a próxima só porque essa já foi paga. Pagamento antecipado não muda
+ * de fatura o que entra depois; só o fechamento faz isso. `now` é capturado uma vez por
+ * chamada de `createTransaction`/`updateTransaction` para que todas as parcelas de uma
+ * mesma compra sejam avaliadas contra o mesmo instante.
+ */
 async function ensureOpenInvoice(
   tx: DatabaseClient,
   details: CardDetails,
   initialSchedule: InvoiceSchedule,
+  now: Date,
 ): Promise<{ id: string; schedule: InvoiceSchedule }> {
   let schedule = initialSchedule;
   for (let attempts = 0; attempts < 120; attempts += 1) {
-    const existing = await tx.invoice.findUnique({
-      where: {
-        creditCardDetailsId_referenceMonth: {
-          creditCardDetailsId: details.id,
-          referenceMonth: schedule.referenceMonth,
+    if (isOpenForPosting(schedule.closingDate, now)) {
+      const invoice = await tx.invoice.upsert({
+        where: {
+          creditCardDetailsId_referenceMonth: {
+            creditCardDetailsId: details.id,
+            referenceMonth: schedule.referenceMonth,
+          },
         },
-      },
-      select: { id: true, status: true },
-    });
-    if (!existing) {
-      const created = await tx.invoice.create({
-        data: {
-          creditCardDetailsId: details.id,
-          ...schedule,
-          status: "OPEN",
-        },
+        create: { creditCardDetailsId: details.id, ...schedule },
+        update: {},
         select: { id: true },
       });
-      return { id: created.id, schedule };
-    }
-    if (existing.status !== "PAID" && existing.status !== "CLOSED") {
-      return { id: existing.id, schedule };
+      return { id: invoice.id, schedule };
     }
     schedule = shiftInvoiceSchedule(schedule, 1, details.closingDay, details.dueDay);
   }
@@ -765,11 +768,16 @@ function transferLegs(userId: string, input: TransferInput, transferGroupId: str
   ];
 }
 
-function assertInvoiceMutable(status: string | undefined): void {
-  if (status === "PAID") {
+/**
+ * Trava de edição: o que importa é o fechamento, não o pagamento. Fatura paga e ainda
+ * aberta continua aceitando edição e exclusão normalmente — só depois de fechar é que a
+ * parcela vira histórico imutável.
+ */
+function assertInvoiceOpenForEdit(closingDate: Date | undefined, now: Date): void {
+  if (closingDate && !isOpenForPosting(closingDate, now)) {
     throw new TransactionServiceError(
-      "PAID_INVOICE_IMMUTABLE",
-      "Parcela de fatura paga não pode ser editada ou excluída.",
+      "CLOSED_INVOICE_IMMUTABLE",
+      "Parcela de fatura fechada não pode ser editada ou excluída.",
     );
   }
 }

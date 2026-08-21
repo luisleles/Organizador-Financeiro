@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { formatDate } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
-import { createTransaction } from "@/server/transactions/transaction.service";
+import { createTransaction, payInvoice } from "@/server/transactions/transaction.service";
 import {
   RECURRENCE_PROVIDER,
   confirmOccurrence,
@@ -430,7 +430,8 @@ describe("getBalanceProjection", () => {
       tagIds: [],
       notes: null,
     });
-    await prisma.invoice.updateMany({ data: { status: "PAID", paidAt: HOJE } });
+    const invoice = await prisma.invoice.findFirstOrThrow();
+    await payInvoice(invoice.id, contaId, 45000, HOJE);
 
     const projecao = await getBalanceProjection(90, HOJE);
     expect(projecao.days.every((dia) => dia.changeCents === 0)).toBe(true);

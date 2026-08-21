@@ -5,8 +5,11 @@ import {
   creditCardCycle,
   creditCardPosition,
   groupByInvoice,
+  invoiceCycleStatus,
   invoiceHistoryStart,
+  invoicePaymentStatus,
   isLimitAlert,
+  isOpenForPosting,
 } from "./account.credit-card";
 
 const CREDIT_LIMIT = 1_000_000; // R$ 10.000,00
@@ -251,6 +254,56 @@ describe("groupByInvoice", () => {
 
   it("devolve lista vazia sem lançamentos", () => {
     expect(groupByInvoice([], CLOSING_DAY, DUE_DAY, today)).toEqual([]);
+  });
+});
+
+describe("isOpenForPosting", () => {
+  const closingDate = new Date("2026-08-20T03:00:00.000Z");
+
+  it("aceita hoje antes do fechamento", () => {
+    expect(isOpenForPosting(closingDate, new Date("2026-08-10T15:00:00Z"))).toBe(true);
+  });
+
+  it("aceita o próprio dia do fechamento", () => {
+    expect(isOpenForPosting(closingDate, new Date("2026-08-20T23:00:00Z"))).toBe(true);
+  });
+
+  it("recusa um dia depois do fechamento, mesmo que a fatura nunca tenha sido paga", () => {
+    expect(isOpenForPosting(closingDate, new Date("2026-08-21T15:00:00Z"))).toBe(false);
+  });
+});
+
+describe("invoiceCycleStatus", () => {
+  const closingDate = new Date("2026-08-20T03:00:00.000Z");
+
+  it("é OPEN até o fechamento e CLOSED depois, sem olhar para pagamento", () => {
+    expect(invoiceCycleStatus(closingDate, new Date("2026-08-20T15:00:00Z"))).toBe("OPEN");
+    expect(invoiceCycleStatus(closingDate, new Date("2026-08-21T15:00:00Z"))).toBe("CLOSED");
+  });
+});
+
+describe("invoicePaymentStatus", () => {
+  it("é UNPAID sem paidAt, mesmo com saldo zerado por coincidência", () => {
+    expect(invoicePaymentStatus(0, null)).toBe("UNPAID");
+    expect(invoicePaymentStatus(-5000, null)).toBe("UNPAID");
+  });
+
+  it("é PARTIALLY_PAID quando ainda sobra dívida depois de um pagamento", () => {
+    expect(invoicePaymentStatus(-3400, new Date("2026-08-15T03:00:00Z"))).toBe("PARTIALLY_PAID");
+  });
+
+  it("é PAID quando o pagamento zerou o saldo", () => {
+    expect(invoicePaymentStatus(0, new Date("2026-08-15T03:00:00Z"))).toBe("PAID");
+  });
+
+  it("é OVERPAID quando o saldo vira crédito, e o valor é exatamente o excedente", () => {
+    expect(invoicePaymentStatus(4518, new Date("2026-08-15T03:00:00Z"))).toBe("OVERPAID");
+  });
+
+  it("um lançamento novo depois do pagamento derruba PAID para PARTIALLY_PAID sem apagar paidAt", () => {
+    const paidAt = new Date("2026-08-15T03:00:00Z");
+    expect(invoicePaymentStatus(0, paidAt)).toBe("PAID");
+    expect(invoicePaymentStatus(-34000, paidAt)).toBe("PARTIALLY_PAID");
   });
 });
 

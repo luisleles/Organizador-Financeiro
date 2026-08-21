@@ -21,7 +21,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "db:migrate-goals": "tsx scripts/migrate-goals-to-buckets.ts"
+    "db:migrate-goals": "tsx scripts/migrate-goals-to-buckets.ts",
+    "audit:faturas": "tsx scripts/audit-invoice-allocation.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

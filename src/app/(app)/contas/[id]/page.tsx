@@ -40,7 +40,9 @@ export default async function ContaPage({ params, searchParams }: ContaPageProps
   const selectedInvoice = invoices
     ? (invoices.find((invoice) => invoice.id === fatura) ??
       invoices.find((invoice) => invoice.closingDate.getTime() === card?.closingDate.getTime()) ??
-      invoices.find((invoice) => invoice.status !== "PAID") ??
+      invoices.find(
+        (invoice) => invoice.paymentStatus !== "PAID" && invoice.paymentStatus !== "OVERPAID",
+      ) ??
       invoices[0])
     : undefined;
   const selectedIndex = selectedInvoice && invoices ? invoices.indexOf(selectedInvoice) : -1;
@@ -170,7 +172,7 @@ export default async function ContaPage({ params, searchParams }: ContaPageProps
                 outstandingCents={selectedDebtCents}
                 accounts={assetAccounts}
                 today={todayISO()}
-                disabled={selectedDebtCents === 0 || selectedInvoice.status === "PAID"}
+                disabled={selectedDebtCents === 0}
               />
             </div>
           ) : undefined

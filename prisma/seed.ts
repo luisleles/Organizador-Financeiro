@@ -609,7 +609,7 @@ async function allocateSeedCardTransactions(accountId: string) {
           referenceMonth: schedule.referenceMonth,
         },
       },
-      create: { creditCardDetailsId: details.id, ...schedule, status: "OPEN" },
+      create: { creditCardDetailsId: details.id, ...schedule },
       update: {},
       select: { id: true },
     });

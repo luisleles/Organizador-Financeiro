@@ -22,14 +22,6 @@ enum AccountClass {
   LIABILITY
 }
 
-enum InvoiceStatus {
-  OPEN
-  CLOSED
-  PAID
-  PARTIALLY_PAID
-  OVERDUE
-}
-
 enum CategoryKind {
   INCOME
   EXPENSE
@@ -107,13 +99,18 @@ model CreditCardDetails {
   invoices Invoice[]
 }
 
+/// Ciclo (aberta/fechada) e pagamento não são um único status: o ciclo vem só do
+/// `closingDate` (`isOpenForPosting`, em `account.credit-card.ts`) e nunca é persistido, e o
+/// pagamento vem do saldo atual dos lançamentos mais este `paidAt` — a data em que a fatura
+/// zerou por um pagamento. Sem essa marca, nenhum lançamento é considerado pagamento: um
+/// saldo zerado por coincidência de estorno não vira "paga" à toa. Ver
+/// `invoicePaymentStatus` para a derivação completa.
 model Invoice {
-  id                     String        @id @default(cuid())
+  id                     String   @id @default(cuid())
   creditCardDetailsId    String
   referenceMonth         DateTime
   closingDate            DateTime
   dueDate                DateTime
-  status                 InvoiceStatus @default(OPEN)
   paidAt                 DateTime?
   paymentTransferGroupId String?
 

@@ -1,6 +1,11 @@
-import type { AccountClass, AccountType, InvoiceStatus } from "@prisma/client";
+import type { AccountClass, AccountType } from "@prisma/client";
 import type { BalancePoint, ConsolidatedBalance } from "./account.balance";
-import type { CreditCardCycle, CreditCardPosition } from "./account.credit-card";
+import type {
+  CreditCardCycle,
+  CreditCardPosition,
+  InvoiceCycleStatus,
+  InvoicePaymentStatus,
+} from "./account.credit-card";
 
 /** Termos cadastrados do cartão, presentes só quando `type` é `CREDIT_CARD`. */
 export type CreditCardTerms = {
@@ -64,7 +69,9 @@ export type AccountInvoice = {
   referenceMonth: Date;
   closingDate: Date;
   dueDate: Date;
-  status: InvoiceStatus;
+  /** Se ainda aceita lançamento novo — vem só do fechamento, nunca do pagamento. */
+  cycleStatus: InvoiceCycleStatus;
+  paymentStatus: InvoicePaymentStatus;
   paidAt: Date | null;
   paymentTransferGroupId: string | null;
   totalCents: number;
