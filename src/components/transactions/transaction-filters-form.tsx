@@ -191,12 +191,13 @@ function CheckboxGroup({ legend, name, selected, items }: CheckboxGroupProps) {
       </summary>
       <div className="border-linha flex max-h-44 flex-col gap-1 overflow-y-auto border-t px-3 py-2">
         {items.map((item) => (
-          <label key={item.id} className="flex items-center gap-2 text-sm">
+          <label key={item.id} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-0">
             <input
               type="checkbox"
               name={name}
               value={item.id}
               defaultChecked={selected.includes(item.id)}
+              className="accent-foco size-5 sm:size-4"
             />
             {item.name}
           </label>

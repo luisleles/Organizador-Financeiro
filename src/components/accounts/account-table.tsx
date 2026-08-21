@@ -19,7 +19,7 @@ function AccountNameCell({ account, subtitle }: AccountNameCellProps) {
         <span className="flex flex-col">
           <Link
             href={`/contas/${account.id}`}
-            className="text-texto font-medium hover:underline hover:underline-offset-4"
+            className="link-acao text-texto font-medium hover:underline hover:underline-offset-4"
           >
             {account.name}
           </Link>
@@ -94,7 +94,7 @@ export function AccountTable({ accounts, valuesHidden }: AccountTableProps) {
                   <span className="flex flex-col">
                     <Link
                       href={`/contas/${bucket.id}`}
-                      className="text-texto text-sm hover:underline hover:underline-offset-4"
+                      className="link-acao text-texto text-sm hover:underline hover:underline-offset-4"
                     >
                       {bucket.name}
                     </Link>

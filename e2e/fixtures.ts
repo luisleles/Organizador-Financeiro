@@ -1,5 +1,5 @@
 import { expect, test as base, type Page } from "@playwright/test";
-import { E2E_EMAIL, E2E_PASSWORD } from "./global-setup";
+import { E2E_EMAIL, E2E_PASSWORD } from "./credenciais";
 
 export { expect };
 

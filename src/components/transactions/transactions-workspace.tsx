@@ -126,6 +126,68 @@ export function TransactionsWorkspace({
     setSelected(allSelected ? new Set() : new Set(listing.rows.map((row) => row.id)));
   }
 
+  /**
+   * No celular a tabela vira lista. Seis colunas em 375px ou truncam a descrição — que é o
+   * que a pessoa lê para se lembrar do gasto — ou empurram o valor para fora da tela. Em
+   * duas linhas cabe tudo, o alvo de toque passa de 56px e não há gesto lateral competindo
+   * com o "voltar" do navegador.
+   */
+  const renderCard = (row: TransactionRow, comData = true) => (
+    <li
+      key={row.id}
+      className={cn("border-linha border-b", selected.has(row.id) && "bg-superficie")}
+    >
+      <div className="flex items-center gap-3 px-1 py-2.5">
+        <label className="flex min-h-11 min-w-11 items-center justify-center">
+          <span className="sr-only">Selecionar {row.description}</span>
+          <input
+            type="checkbox"
+            checked={selected.has(row.id)}
+            onChange={() => toggleRow(row.id)}
+            className="accent-foco size-5"
+          />
+        </label>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (row.invoiceId && row.transferGroupId) return;
+            if (row.transferGroupId) void openTransfer(row);
+            else setDialog({ kind: "edit-transaction", row });
+          }}
+          className="flex min-h-11 flex-1 flex-col justify-center gap-0.5 text-left"
+        >
+          <span className="flex items-baseline justify-between gap-3">
+            <span className="text-texto text-sm">{row.description}</span>
+            <Amount
+              cents={row.amountCents}
+              size="sm"
+              tone={row.type === "TRANSFER" ? "previsto" : "auto"}
+            />
+          </span>
+          <span className="text-texto-fraco flex flex-wrap items-center gap-x-1.5 text-xs">
+            {comData && (
+              <>
+                <span className="valor">{formatDate(row.date)}</span>
+                <span aria-hidden>·</span>
+              </>
+            )}
+            <span>
+              {row.type === "TRANSFER" ? "transferência" : (row.categoryName ?? "sem categoria")}
+            </span>
+            <span aria-hidden>·</span>
+            <span>{row.accountName}</span>
+            {row.tags.map((tag) => (
+              <Badge key={tag.id} tone="neutro">
+                {tag.name}
+              </Badge>
+            ))}
+          </span>
+        </button>
+      </div>
+    </li>
+  );
+
   const renderRow = (row: TransactionRow) => (
     <tr key={row.id} className={cn("hover:bg-fundo", selected.has(row.id) && "bg-superficie")}>
       <TableCell className="w-10">
@@ -201,39 +263,62 @@ export function TransactionsWorkspace({
           }
         />
       ) : (
-        <Table caption="Lançamentos do período">
-          <thead>
-            <tr>
-              <TableHeadCell className="w-10">
-                <input
-                  type="checkbox"
-                  aria-label="Selecionar todos"
-                  checked={allSelected}
-                  onChange={toggleAll}
-                />
-              </TableHeadCell>
-              <TableHeadCell>Data</TableHeadCell>
-              <TableHeadCell>Descrição</TableHeadCell>
-              <TableHeadCell className="hidden md:table-cell">Categoria</TableHeadCell>
-              <TableHeadCell className="hidden sm:table-cell">Conta</TableHeadCell>
-              <TableHeadCell value>Valor</TableHeadCell>
-            </tr>
-          </thead>
-          {groups ? (
-            groups.map((group) => (
-              <tbody key={group.key}>
-                <TableGroupRow
-                  columnSpan={5}
-                  label={formatDate(group.date)}
-                  total={<Amount cents={group.totalCents} size="sm" />}
-                />
-                {group.entries.map(renderRow)}
-              </tbody>
-            ))
-          ) : (
-            <tbody>{listing.rows.map(renderRow)}</tbody>
-          )}
-        </Table>
+        <>
+          <div className="sm:hidden">
+            {(groups ?? [{ key: "todos", date: null, totalCents: 0, entries: listing.rows }]).map(
+              (group) => (
+                <section
+                  key={group.key}
+                  aria-label={group.date ? formatDate(group.date) : undefined}
+                >
+                  {group.date && (
+                    <h3 className="border-linha bg-fundo text-2xs text-texto-fraco sticky top-0 flex items-center justify-between border-b px-1 py-1.5 font-semibold uppercase">
+                      <span className="valor">{formatDate(group.date)}</span>
+                      <Amount cents={group.totalCents} size="xs" />
+                    </h3>
+                  )}
+                  <ul className="flex flex-col">
+                    {group.entries.map((row) => renderCard(row, group.date === null))}
+                  </ul>
+                </section>
+              ),
+            )}
+          </div>
+
+          <Table caption="Lançamentos do período" className="hidden sm:table">
+            <thead>
+              <tr>
+                <TableHeadCell className="w-10">
+                  <input
+                    type="checkbox"
+                    aria-label="Selecionar todos"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                  />
+                </TableHeadCell>
+                <TableHeadCell>Data</TableHeadCell>
+                <TableHeadCell>Descrição</TableHeadCell>
+                <TableHeadCell className="hidden md:table-cell">Categoria</TableHeadCell>
+                <TableHeadCell className="hidden sm:table-cell">Conta</TableHeadCell>
+                <TableHeadCell value>Valor</TableHeadCell>
+              </tr>
+            </thead>
+            {groups ? (
+              groups.map((group) => (
+                <tbody key={group.key}>
+                  <TableGroupRow
+                    columnSpan={5}
+                    label={formatDate(group.date)}
+                    total={<Amount cents={group.totalCents} size="sm" />}
+                  />
+                  {group.entries.map(renderRow)}
+                </tbody>
+              ))
+            ) : (
+              <tbody>{listing.rows.map(renderRow)}</tbody>
+            )}
+          </Table>
+        </>
       )}
 
       <BulkActionsBar selectedIds={[...selected]} options={options} onDone={clearSelection} />

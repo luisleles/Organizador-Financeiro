@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, E2E_PASSWORD } from "./global-setup";
+import { E2E_EMAIL, E2E_PASSWORD } from "./credenciais";
 
 test.describe("Login", () => {
   test("recusa senha errada sem revelar se o e-mail existe", async ({ page }) => {

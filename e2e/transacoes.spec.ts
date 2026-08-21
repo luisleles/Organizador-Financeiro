@@ -12,7 +12,9 @@ test("lança uma despesa e ela entra no extrato", async ({ autenticado: page }) 
   await dialogo.getByRole("button", { name: "Salvar e continuar" }).click();
   await page.keyboard.press("Escape");
 
-  await expect(page.getByText("Café do teste E2E")).toBeVisible();
+  // O extrato existe duas vezes no DOM — tabela no desktop, cartões no celular, uma
+  // escondida por CSS. Na largura padrão do teste quem vale é a tabela.
+  await expect(page.getByRole("table").getByText("Café do teste E2E")).toBeVisible();
 });
 
 test("transferência gera duas pernas e não muda o patrimônio", async ({ autenticado: page }) => {
@@ -29,7 +31,7 @@ test("transferência gera duas pernas e não muda o patrimônio", async ({ auten
   await dialogo.getByRole("button", { name: "Transferir" }).click();
 
   // Duas pernas: uma sai de uma conta, a outra entra na outra.
-  await expect(page.getByText("Transferência do teste E2E")).toHaveCount(2);
+  await expect(page.getByRole("table").getByText("Transferência do teste E2E")).toHaveCount(2);
 
   // Dinheiro que só muda de bolso não altera o patrimônio.
   expect(await saldoLiquido(page)).toBe(antes);

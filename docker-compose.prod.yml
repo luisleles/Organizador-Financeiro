@@ -26,9 +26,13 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: file:/app/data/app.db
-    # Só escuta em localhost: quem for expor à internet põe um proxy com TLS na frente.
+      # Endereço canônico. Sem isto o login funciona no desktop e falha calado no celular.
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+    # Escuta em todas as interfaces: é assim que o celular na mesma rede alcança o app.
+    # Quem preferir manter só localhost e expor pelo Tailscale troca por "127.0.0.1:3000:3000"
+    # e roda `tailscale serve`, que fala com o app por dentro da máquina.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "0.0.0.0:3000:3000"
     volumes:
       # O banco vive fora da imagem: recriar o contêiner não pode levar os dados junto.
       - app-data:/app/data

@@ -14,6 +14,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "auth:senha": "tsx scripts/definir-senha.ts",
+    "backup": "tsx scripts/backup.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "test": "vitest run",

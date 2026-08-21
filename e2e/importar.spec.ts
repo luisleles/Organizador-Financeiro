@@ -27,7 +27,7 @@ test("importa um CSV, revisa e só grava depois de confirmar", async ({ autentic
 
   // O que entrou aparece no extrato.
   await page.goto("/transacoes?periodo=ano");
-  await expect(page.getByText("Mercado do teste E2E")).toBeVisible();
+  await expect(page.getByRole("table").getByText("Mercado do teste E2E")).toBeVisible();
 });
 
 test("reimportar o mesmo arquivo não duplica nada", async ({ autenticado: page }) => {

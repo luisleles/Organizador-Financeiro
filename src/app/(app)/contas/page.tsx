@@ -62,7 +62,7 @@ export default async function ContasPage({ searchParams }: ContasPageProps) {
             action={
               <Link
                 href={includeArchived ? "/contas" : "/contas?arquivadas=1"}
-                className="text-texto-fraco hover:text-texto text-xs"
+                className="link-acao text-texto-fraco hover:text-texto text-xs"
               >
                 {includeArchived ? "Ocultar arquivadas" : "Mostrar arquivadas"}
               </Link>

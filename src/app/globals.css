@@ -225,3 +225,31 @@
   font-family: var(--font-numero);
   font-variant-numeric: tabular-nums slashed-zero;
 }
+
+/*
+  Link que é ação, e não texto corrido. No celular ganha 44px de altura — o mínimo que um
+  dedo acerta sem errar o vizinho; a partir de `sm`, onde o ponteiro é preciso, volta a ser
+  um link comum e a densidade da tela é preservada.
+*/
+.link-acao {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+}
+
+@media (min-width: 40rem) {
+  .link-acao {
+    min-height: 0;
+  }
+}
+
+/*
+  `<details>` não tem como abrir só a partir de um breakpoint. No desktop o CSS revela o
+  conteúdo independentemente do atributo `open`, e o resumo clicável some — o bloco vira um
+  card comum. No celular ele volta a ser um acordeão de verdade.
+*/
+@media (min-width: 40rem) {
+  details.group > div {
+    display: block !important;
+  }
+}

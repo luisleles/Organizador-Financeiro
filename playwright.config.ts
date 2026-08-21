@@ -16,7 +16,6 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
-  globalSetup: "./e2e/global-setup.ts",
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: "on-first-retry",
@@ -26,14 +25,27 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: `npm run build && npx next start --port ${PORT}`,
+    command: `npx tsx scripts/preparar-e2e.ts && npm run build && npx next start --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}/api/saude`,
-    reuseExistingServer: !process.env.CI,
+    /**
+     * Nunca reaproveita servidor. O banco é recriado a cada rodada, e um
+     * servidor de antes continuaria segurando o arquivo antigo — que já foi apagado. O
+     * sintoma é cruel: as escritas parecem funcionar, as leituras seguintes falham com
+     * `disk I/O error`, e o teste acusa a tela em vez do ambiente.
+     */
+    reuseExistingServer: false,
     timeout: 180_000,
     env: {
       DATABASE_URL,
       AUTH_SECRET: "segredo-de-teste-e2e-nao-use-em-producao",
       NODE_ENV: "production",
+      /**
+       * Fixa o endereço canônico do servidor de teste. Sem isto, o `AUTH_URL` do `.env` da
+       * máquina — que aponta para o endereço do Tailscale em quem já configurou o acesso
+       * pelo celular — faz o login redirecionar para fora do teste. A suíte quebraria numa
+       * máquina e passaria em outra, pelo estado do ambiente e não pelo código.
+       */
+      AUTH_URL: `http://127.0.0.1:${PORT}`,
     },
   },
 });

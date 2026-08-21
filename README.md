@@ -140,12 +140,65 @@ por isso que a maior parte da suíte roda em milissegundos. A arquitetura está 
 
 - **Open Finance** pela `TransactionSource` que já existe — é a razão de a abstração ter sido
   construída antes de haver uma segunda fonte de verdade.
-- **PWA com modo offline**, para lançar no mercado sem sinal e sincronizar depois.
+- **Lançamento offline com fila de sincronização**: hoje o PWA instala e abre como app, mas
+  exige conexão com o servidor. Falta uma fila local só de escrita — nunca de leitura de
+  saldo — que sincronize quando a rede voltar.
+- **Acesso remoto sem depender do computador ligado**, seja com o app rodando num servidor
+  pequeno em casa ou numa VPS, mantendo o mesmo desenho de rede privada do Tailscale.
 - **Relatório de imposto de renda**, agrupando o ano por categoria no formato que a
   declaração pede.
 - **Multiusuário opcional**, com escopo por família — o `userId` já atravessa toda query, o
   que falta é a interface de convite.
 - **Anexo em lançamento**, para guardar a nota fiscal junto da despesa.
+
+## Acesso pelo celular
+
+O app roda no seu computador; o celular só precisa de um caminho até ele. A recomendação é
+**Tailscale**: dá HTTPS de verdade — que é o que o PWA exige para instalar —, expõe o app só
+para os seus aparelhos, e **o mesmo endereço continua funcionando fora de casa**, sem uma
+segunda configuração para "acesso remoto".
+
+```bash
+# no computador que roda o app
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+sudo tailscale serve --bg 3000
+```
+
+Depois, e este é o passo que a maioria esquece, conte ao app qual é o endereço dele:
+
+```bash
+# .env
+AUTH_URL="https://sua-maquina.seu-tailnet.ts.net"
+```
+
+Sem `AUTH_URL`, o Auth.js monta o callback do login para `localhost` — que, no celular, é o
+próprio celular. A senha é aceita, a tela recarrega e volta para o login **sem mensagem de
+erro nenhuma**. É o sintoma mais confuso de toda a configuração, e a causa é sempre esta.
+
+No celular: instale o Tailscale, abra o endereço, faça login e use "Adicionar à Tela de
+Início" (iOS) ou "Instalar aplicativo" (Android). O app passa a abrir sem barra de navegador.
+
+O passo a passo completo — incluindo o plano B com Caddy e mkcert na LAN, para quem não
+quiser Tailscale — está em [docs/ACESSO-REMOTO.md](docs/ACESSO-REMOTO.md).
+
+<p align="center">
+  <img src="docs/imagens/celular-inicio.png" width="32%" alt="Painel no celular, em modo escuro" />
+  <img src="docs/imagens/celular-extrato.png" width="32%" alt="Extrato em cartões empilhados no celular" />
+</p>
+
+### O que muda no celular
+
+A interface foi revista em 375px. O extrato deixa de ser tabela e vira lista de cartões,
+porque seis colunas nessa largura truncam justamente a descrição, que é o que faz lembrar do
+gasto. Campo de valor abre teclado numérico, diálogos viram folha de baixo — ao alcance do
+polegar, que é como se lança um gasto na fila do mercado —, e a barra inferior respeita a
+área segura do aparelho.
+
+O app funciona instalado, mas **não funciona offline de propósito**: o service worker guarda
+só o shell e os arquivos estáticos. Dado financeiro nunca é cacheado, porque um saldo velho
+guardado no disco do navegador é pior do que um aviso de que falta conexão — e é esse aviso
+que aparece.
 
 ## Abrindo com um clique (Linux)
 
@@ -269,6 +322,8 @@ A aplicação sobe em [http://localhost:3000](http://localhost:3000).
 | `npm run db:seed`    | Popula o banco com dados iniciais                 |
 | `npm run db:studio`  | Abre o Prisma Studio para inspecionar o banco     |
 | `npm run auth:senha` | Redefine a senha do usuário pelo terminal         |
+| `npm run backup`     | Gera um backup do banco e aplica a retenção       |
+| `npm run test:e2e`   | Roda o Playwright contra o build de produção      |
 | `npm run abrir`      | Sobe o app pronto para uso e abre no navegador    |
 
 ## Banco de dados
@@ -277,8 +332,14 @@ O arquivo SQLite fica em `./data/app.db`, fora do controle de versão (a pasta `
 está no `.gitignore`). A conexão é configurada pela variável `DATABASE_URL` em `.env`,
 a partir do `.env.example`.
 
-Exportação completa em CSV e JSON e backup do banco ficam em **Configurações**; a
-restauração está documentada em [docs/IMPORTACAO.md](docs/IMPORTACAO.md).
+Exportação completa em CSV e JSON e backup sob demanda ficam em **Configurações**.
+
+Para backup automático, `bash scripts/instalar-backup-diario.sh` agenda um timer de usuário
+do systemd que roda `npm run backup` todo dia, com retenção de 30 dias e recuperação das
+execuções perdidas enquanto a máquina esteve desligada. Restaurar é
+`bash scripts/restaurar-backup.sh data/backups/app-AAAA-MM-DD.db` — ele para o app, guarda o
+banco atual com data e hora antes de sobrescrever e aplica as migrations, o que permite
+restaurar um backup de schema mais antigo.
 
 ## Licença
 

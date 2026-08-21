@@ -7,7 +7,10 @@ import { TEST_DATABASE_FILE, TEST_DATABASE_URL } from "./vitest.database";
  * uma transferência mudam juntas exige uma transação de banco de verdade, não um dublê.
  */
 export default function setup() {
-  rmSync(TEST_DATABASE_FILE, { force: true });
+  // WAL: o banco são três arquivos, e um WAL órfão quebra a primeira escrita.
+  for (const sufixo of ["", "-journal", "-wal", "-shm"]) {
+    rmSync(`${TEST_DATABASE_FILE}${sufixo}`, { force: true });
+  }
   execSync("npx prisma migrate deploy", {
     env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
     stdio: "pipe",

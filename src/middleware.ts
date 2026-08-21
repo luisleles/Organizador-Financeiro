@@ -5,7 +5,11 @@ import { securityHeaders } from "@/server/security/headers";
 
 const { auth } = NextAuth(authConfig);
 
-const PUBLIC_ROUTES = ["/login"];
+/**
+ * `/sem-conexao` é pública porque o service worker a guarda e a exibe justamente quando não
+ * há como falar com o servidor — inclusive antes de haver sessão.
+ */
+const PUBLIC_ROUTES = ["/login", "/sem-conexao"];
 
 /**
  * Duas responsabilidades, na ordem: ninguém passa sem sessão, e toda resposta sai com os
@@ -44,13 +48,15 @@ function applyHeaders(response: NextResponse, headers: Record<string, string>): 
 export const config = {
   /**
    * Fora da proteção ficam os estáticos, as rotas do próprio Auth.js — que precisam
-   * responder a quem ainda não tem sessão, porque é por elas que a sessão nasce — e o
-   * healthcheck, que o Docker consulta sem cookie nenhum.
+   * responder a quem ainda não tem sessão, porque é por elas que a sessão nasce —, o
+   * healthcheck, que o Docker consulta sem cookie nenhum, e os arquivos do PWA: um
+   * `sw.js` que responde 307 para o login não registra, e um manifesto que redireciona
+   * faz o celular deixar de oferecer a instalação, tudo isso em silêncio.
    *
    * Tudo o mais entra, inclusive `/api/exportar` e `/api/backup`: são rotas que despejam o
    * banco inteiro, e é justamente o tipo de coisa que não pode ficar de fora por descuido.
    */
   matcher: [
-    "/((?!api/auth|api/saude|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|ico)$).*)",
+    "/((?!api/auth|api/saude|_next/static|_next/image|favicon.ico|icones/|sw.js|manifest.webmanifest|.*\\.(?:svg|png|jpg|ico)$).*)",
   ],
 };

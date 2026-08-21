@@ -57,7 +57,7 @@ export default async function RelatoriosPage({ searchParams }: RelatoriosPagePro
             href={`/relatorios?meses=${option}${categoryId ? `&categoria=${categoryId}` : ""}`}
             aria-current={option === monthCount ? "page" : undefined}
             className={cn(
-              "rounded-md border px-3 py-1.5 text-xs transition",
+              "link-acao rounded-md border px-3 py-1.5 text-xs transition",
               option === monthCount
                 ? "border-tinta bg-superficie text-texto font-medium"
                 : "border-linha text-texto-fraco hover:border-linha-forte hover:text-texto",
@@ -99,7 +99,7 @@ export default async function RelatoriosPage({ searchParams }: RelatoriosPagePro
               </Select>
               <button
                 type="submit"
-                className="border-linha text-texto-fraco hover:border-linha-forte hover:text-texto rounded-md border px-2 py-1 text-xs"
+                className="link-acao border-linha text-texto-fraco hover:border-linha-forte hover:text-texto rounded-md border px-2 py-1 text-xs"
               >
                 Ver
               </button>
@@ -145,7 +145,7 @@ function CsvLink({ href }: { href: string }) {
     <Link
       href={href}
       prefetch={false}
-      className="text-texto-fraco hover:text-texto text-xs whitespace-nowrap"
+      className="link-acao text-texto-fraco hover:text-texto text-xs whitespace-nowrap"
     >
       Exportar CSV
     </Link>

@@ -12,8 +12,10 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
 };
 
 const SIZE_CLASS: Record<ButtonSize, string> = {
-  sm: "h-8 gap-1.5 px-3 text-xs",
-  md: "h-10 gap-2 px-4 text-sm",
+  // No celular todo botão tem ao menos 44px de altura; no desktop, onde o ponteiro é
+  // preciso, a densidade original volta.
+  sm: "min-h-11 sm:min-h-0 h-11 sm:h-8 gap-1.5 px-3 text-xs",
+  md: "min-h-11 h-11 sm:h-10 gap-2 px-4 text-sm",
 };
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {

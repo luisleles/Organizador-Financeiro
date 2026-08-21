@@ -66,14 +66,30 @@ export default async function TransacoesPage({ searchParams }: TransacoesPagePro
         </dl>
       </Card>
 
-      <Card title="Filtros">
-        <TransactionFiltersForm
-          filters={filters}
-          options={options}
-          periodParams={periodParams}
-          clearHref={`/transacoes${periodParams.length > 0 ? `?${new URLSearchParams(periodParams)}` : ""}`}
-        />
-      </Card>
+      {/*
+        No celular os filtros começam fechados. Abertos, eles ocupam três telas antes do
+        primeiro lançamento — e quem abre o extrato no celular quer ver o extrato, não
+        montar um recorte. No desktop, onde sobra largura, continuam à vista.
+      */}
+      <details className="border-linha bg-superficie group rounded-lg border">
+        <summary className="text-2xs text-texto-fraco flex min-h-11 cursor-pointer list-none items-center justify-between px-4 font-semibold uppercase sm:hidden">
+          Filtros
+          <span aria-hidden className="text-xs transition group-open:rotate-180">
+            ▾
+          </span>
+        </summary>
+        <h2 className="text-2xs text-texto-fraco border-linha hidden border-b px-4 py-3 font-semibold uppercase sm:block">
+          Filtros
+        </h2>
+        <div className="border-linha border-t px-4 py-4 sm:border-t-0">
+          <TransactionFiltersForm
+            filters={filters}
+            options={options}
+            periodParams={periodParams}
+            clearHref={`/transacoes${periodParams.length > 0 ? `?${new URLSearchParams(periodParams)}` : ""}`}
+          />
+        </div>
+      </details>
 
       <TransactionsWorkspace
         listing={listing}

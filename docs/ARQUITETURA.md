@@ -74,6 +74,23 @@ Dinheiro é `Int` em centavos, em todas as camadas, e só vira texto na renderiz
 Datas são gravadas em UTC e exibidas em `America/Sao_Paulo`; toda conta de calendário passa
 por `src/lib/date.ts`, que trabalha com ano/mês/dia da zona, e não somando milissegundos.
 
+## Acesso pelo celular
+
+O app continua sendo um processo só, na máquina de casa. O celular não ganha uma API nem um
+banco local: ele fala com o mesmo servidor, pela tailnet, e recebe o mesmo HTML renderizado
+no servidor.
+
+Três peças sustentam isso:
+
+- **`APP_URL`** (`src/lib/app-url.ts`) é o endereço canônico, lido de `AUTH_URL`. Auth.js,
+  manifesto do PWA e documentação concordam sobre ele por um módulo só. `localhost` fixo em
+  código seria o bug mais caro desta fase: o login falha **sem mensagem** no celular.
+- **WAL no SQLite** (`src/lib/prisma.ts`), porque celular e desktop abertos ao mesmo tempo
+  deixam de ser hipótese. Com `busy_timeout`, a segunda escrita espera em vez de falhar.
+- **Service worker** (`public/sw.js`) com uma regra dura: cacheia shell e estático
+  versionado, e **nada** de navegação, API ou Server Action. Saldo velho guardado no disco
+  do navegador é pior do que a tela de sem conexão.
+
 ## Testes
 
 | Tipo          | Onde                                             | O que garante                                            |

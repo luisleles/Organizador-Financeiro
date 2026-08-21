@@ -76,7 +76,7 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
           </span>
           <Link
             href="/orcamentos"
-            className="text-texto hover:text-alerta ml-auto text-xs underline underline-offset-4"
+            className="link-acao text-texto hover:text-alerta ml-auto text-xs underline underline-offset-4"
           >
             Ver orçamentos
           </Link>
@@ -113,7 +113,7 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
                   <Link
                     href={`/contas/${account.id}`}
                     prefetch={false}
-                    className="text-texto text-sm hover:underline hover:underline-offset-4"
+                    className="link-acao text-texto text-sm hover:underline hover:underline-offset-4"
                   >
                     {account.name}
                   </Link>
@@ -152,7 +152,7 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
                     <Link
                       href={`/contas/${bucket.id}`}
                       prefetch={false}
-                      className="text-texto-fraco text-xs hover:underline hover:underline-offset-4"
+                      className="link-acao text-texto-fraco text-xs hover:underline hover:underline-offset-4"
                     >
                       {bucket.name}
                     </Link>

@@ -13,7 +13,7 @@ export function Select({ invalid, className, children, ref, ...props }: SelectPr
         ref={ref}
         aria-invalid={invalid || undefined}
         className={cn(
-          "bg-superficie text-md text-texto h-10 w-full appearance-none rounded-md border pr-9 pl-3 transition disabled:cursor-not-allowed disabled:opacity-50",
+          "bg-superficie text-md text-texto h-11 w-full appearance-none rounded-md border pr-9 pl-3 transition disabled:cursor-not-allowed disabled:opacity-50",
           invalid ? "border-alerta" : "border-linha hover:border-linha-forte",
           className,
         )}

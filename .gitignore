@@ -41,7 +41,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# banco de dados local (SQLite)
+# banco de dados local (SQLite), backups e cópias de restauração
 /data
 
 # playwright
