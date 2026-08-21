@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableCell, TableHeadCell } from "@/components/ui/table";
-import { isLimitAlert } from "@/server/accounts/account.credit-card";
 import type { AccountSummary } from "@/server/accounts/account.types";
 import { ACCOUNT_TYPE_LABELS, AccountMark } from "./account-meta";
 
@@ -131,15 +130,20 @@ type CreditCardTableProps = {
   valuesHidden: boolean;
 };
 
-/** Cartão tem tabela própria porque as colunas são outras: fatura e limite, nunca saldo. */
+/**
+ * Cartão tem tabela própria porque a coluna que importa aqui é outra: fatura, nunca saldo.
+ * Limite não aparece nesta lista nem em nenhuma outra tela de visão geral — ele só existe
+ * na tela do próprio cartão, com a barra de uso, porque é lá que faz sentido perguntar
+ * "quanto ainda posso gastar neste cartão". Aqui do lado do patrimônio, listar o limite ao
+ * lado da fatura é o mesmo erro de novo: parece que ele entra na conta.
+ */
 export function CreditCardTable({ accounts, valuesHidden }: CreditCardTableProps) {
   return (
-    <Table caption="Cartões de crédito com fatura e limite">
+    <Table caption="Cartões de crédito com fatura atual">
       <thead>
         <tr>
           <TableHeadCell>Cartão</TableHeadCell>
-          <TableHeadCell className="hidden sm:table-cell">Uso do limite</TableHeadCell>
-          <TableHeadCell className="hidden md:table-cell">Limite disponível</TableHeadCell>
+          <TableHeadCell className="hidden md:table-cell">Lançamentos</TableHeadCell>
           <TableHeadCell value>Fatura atual</TableHeadCell>
         </tr>
       </thead>
@@ -153,29 +157,8 @@ export function CreditCardTable({ accounts, valuesHidden }: CreditCardTableProps
                 account={account}
                 subtitle={account.institution ?? ACCOUNT_TYPE_LABELS[account.type]}
               />
-              <TableCell muted className="hidden sm:table-cell">
-                {card ? (
-                  <span
-                    className={`valor text-num-xs ${isLimitAlert(card.limitUsagePercent) ? "text-alerta" : ""}`}
-                  >
-                    {valuesHidden ? "••" : `${Math.round(card.limitUsagePercent)}%`}
-                  </span>
-                ) : (
-                  "—"
-                )}
-              </TableCell>
               <TableCell muted className="hidden md:table-cell">
-                {card ? (
-                  <Amount
-                    cents={card.availableLimitCents}
-                    size="xs"
-                    tone={card.availableLimitCents < 0 ? "alerta" : "entrada"}
-                    sign="negative"
-                    masked={valuesHidden}
-                  />
-                ) : (
-                  "—"
-                )}
+                <span className="valor text-num-xs">{account.transactionCount}</span>
               </TableCell>
               <TableCell value>
                 {card ? (
