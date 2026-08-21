@@ -24,7 +24,13 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  {
+    // O `use` das fixtures do Playwright não é o hook do React, e a regra de hooks só
+    // enxerga o nome. Desligar a regra na pasta é mais honesto do que renomear a fixture.
+    files: ["e2e/**/*.ts"],
+    rules: { "react-hooks/rules-of-hooks": "off" },
+  },
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "playwright-report/**"]),
 ]);
 
 export default eslintConfig;

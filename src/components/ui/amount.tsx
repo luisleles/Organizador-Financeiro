@@ -77,7 +77,9 @@ export function Amount({
       {showCurrency && <span className="text-texto-fraco mr-1 text-[0.55em]">R$</span>}
       {signGlyph}
       {parts.whole}
-      <span className="text-[0.85em] opacity-70">,{parts.fraction}</span>
+      {/* Só o tamanho separa os centavos. Opacidade os deixaria abaixo de 4.5:1
+          sobre a superfície em qualquer tom com cor. */}
+      <span className="text-[0.85em]">,{parts.fraction}</span>
     </span>
   );
 }

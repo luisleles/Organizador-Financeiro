@@ -3,7 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { authConfig } from "./auth.config";
 import { verifyPassword } from "./server/auth/password";
 import { credentialsSchema } from "./server/auth/auth.schema";
-import { consumeLoginAttempt } from "./server/auth/rate-limit";
+import { consumeLoginAttempt, resetLoginAttempts } from "./server/auth/rate-limit";
 import { prisma } from "./lib/prisma";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -29,6 +29,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // conta a quem está tentando quais e-mails existem.
         const ok = await verifyPassword(password, user?.passwordHash);
         if (!user || !ok) return null;
+
+        // Login que deu certo limpa o histórico: o limite existe para travar quem chuta.
+        resetLoginAttempts(email);
 
         return { id: user.id, name: user.name, email: user.email };
       },

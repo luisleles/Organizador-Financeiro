@@ -11,7 +11,7 @@ import {
 } from "@/server/action-state";
 import { AuthServiceError, createFirstUser } from "@/server/auth/auth.service";
 import { MIN_PASSWORD_LENGTH, credentialsSchema } from "@/server/auth/auth.schema";
-import { checkLoginAttempt } from "@/server/auth/rate-limit";
+import { peekLoginAttempt } from "@/server/auth/rate-limit";
 
 const firstUserSchema = z.object({
   name: z.string().trim().min(1, "Informe seu nome").max(80, "Nome longo demais"),
@@ -32,11 +32,12 @@ export async function signInAction(
   if (!parsed.success) return invalidForm(parsed.error, { email: submitted.email });
 
   // Consulta sem consumir: quem já estourou o limite recebe a mensagem certa, em vez de um
-  // "e-mail ou senha inválidos" que faria a pessoa tentar de novo à toa.
-  const limite = checkLoginAttempt(parsed.data.email, Date.now());
+  // "e-mail ou senha inválidos" que faria a pessoa tentar de novo à toa. Quem conta a
+  // tentativa é o `authorize`, que é quem realmente confere a senha.
+  const limite = peekLoginAttempt(parsed.data.email);
   if (!limite.allowed) {
     return actionError(
-      `Muitas tentativas. Espere ${Math.ceil(limite.retryAfterMs / 60_000)} minutos e tente de novo.`,
+      `Muitas tentativas. Espere ${Math.max(1, Math.ceil(limite.retryAfterMs / 60_000))} minutos e tente de novo.`,
       undefined,
       { email: submitted.email },
     );

@@ -23,32 +23,45 @@ export type RateLimitStatus = {
   retryAfterMs: number;
 };
 
-/** Registra uma tentativa e diz se ela pode prosseguir. */
-export function consumeLoginAttempt(key: string, now: number = Date.now()): boolean {
-  return checkLoginAttempt(key, now).allowed;
-}
-
-export function checkLoginAttempt(key: string, now: number = Date.now()): RateLimitStatus {
-  const bucket = buckets.get(key) ?? { attempts: [], lockedUntil: 0 };
+/**
+ * Consulta sem registrar. Existe para a tela poder dizer "espere tantos minutos" sem gastar
+ * uma tentativa — quem só olha a porta não bateu nela.
+ */
+export function peekLoginAttempt(key: string, now: number = Date.now()): RateLimitStatus {
+  const bucket = buckets.get(key);
+  if (!bucket) return { allowed: true, remaining: MAX_ATTEMPTS, retryAfterMs: 0 };
 
   if (bucket.lockedUntil > now) {
     return { allowed: false, remaining: 0, retryAfterMs: bucket.lockedUntil - now };
   }
 
   const recentes = bucket.attempts.filter((instante) => now - instante < WINDOW_MS);
+  return {
+    allowed: recentes.length < MAX_ATTEMPTS,
+    remaining: Math.max(0, MAX_ATTEMPTS - recentes.length),
+    retryAfterMs: 0,
+  };
+}
+
+/**
+ * Registra uma tentativa e diz se ela pode prosseguir. Só quem de fato vai verificar a
+ * senha chama isto: contar a mesma tentativa em dois lugares gastaria o dobro do limite.
+ */
+export function consumeLoginAttempt(key: string, now: number = Date.now()): boolean {
+  const bucket = buckets.get(key) ?? { attempts: [], lockedUntil: 0 };
+
+  if (bucket.lockedUntil > now) return false;
+
+  const recentes = bucket.attempts.filter((instante) => now - instante < WINDOW_MS);
   recentes.push(now);
 
   if (recentes.length > MAX_ATTEMPTS) {
     buckets.set(key, { attempts: [], lockedUntil: now + LOCKOUT_MS });
-    return { allowed: false, remaining: 0, retryAfterMs: LOCKOUT_MS };
+    return false;
   }
 
   buckets.set(key, { attempts: recentes, lockedUntil: 0 });
-  return {
-    allowed: true,
-    remaining: MAX_ATTEMPTS - recentes.length,
-    retryAfterMs: 0,
-  };
+  return true;
 }
 
 /** Login bem-sucedido zera o contador daquele e-mail. */

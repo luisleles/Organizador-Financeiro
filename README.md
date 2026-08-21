@@ -1,28 +1,151 @@
 # Controle Financeiro
 
-Aplicação web de controle financeiro pessoal, para uso individual e local. Não há
-autenticação nem multiusuário: é uma ferramenta para uma única pessoa acompanhar suas
-próprias finanças.
+Um app de finanças pessoais que roda na sua máquina: você lança, importa extrato do banco e
+enxerga para onde o dinheiro vai — sem mandar um centavo de informação para lugar nenhum.
 
-## Stack
+![Painel do Controle Financeiro em modo escuro](docs/imagens/painel.jpg)
 
-- [Next.js 15](https://nextjs.org/) (App Router) com TypeScript em modo strict
-- [Prisma](https://www.prisma.io/) + SQLite
-- [Tailwind CSS](https://tailwindcss.com/)
-- Docker Compose para desenvolvimento e produção
+<p align="center">
+  <img src="docs/imagens/extrato.jpg" width="49%" alt="Extrato com filtros e agrupamento por dia" />
+  <img src="docs/imagens/importacao.jpg" width="49%" alt="Revisão de um extrato CSV antes de importar" />
+</p>
 
-Valores monetários são sempre armazenados como inteiros em centavos. Datas ficam em UTC
-no banco e são exibidas no fuso `America/Sao_Paulo`. Moeda: BRL.
+## O que ele faz
 
-## Estrutura de pastas
+Contas e cartões com fatura de verdade, extrato com filtros que vivem na URL, categorias em
+árvore com regras automáticas, orçamentos com ritmo do mês, metas como caixinhas no ledger,
+recorrências que se lançam sozinhas, projeção de saldo para 90 dias, importação de CSV e OFX
+com revisão antes de gravar, relatórios, exportação completa e backup.
 
+## Rodando em um comando
+
+```bash
+git clone https://github.com/luisleles/Organizador-Financeiro.git
+cd Organizador-Financeiro && cp .env.example .env && npx auth secret && npm install && npm run demo
 ```
-src/app        rotas e páginas (Next.js App Router)
-src/components componentes de UI
-src/lib        utilitários (formatação de moeda, datas, prisma client)
-src/server     camada de serviço e regras de negócio
-prisma         schema, migrations e seed
+
+`npm run demo` aplica as migrations, semeia **oito meses de dados fictícios** — contas,
+cartão com faturas, 300 lançamentos, orçamentos, metas e recorrências — e sobe o app em
+[localhost:3000](http://localhost:3000). O terminal imprime o e-mail e a senha sorteada
+para entrar. Nada de tela vazia esperando você digitar meio ano de extrato para entender o
+que o app faz.
+
+## Stack, e por quê
+
+| Escolha                    | Por quê                                                                                                                                                                                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Next.js 15, App Router** | Server Components leem o banco direto, sem uma camada de API que só repassaria JSON para mim mesmo. Server Actions dão mutação com progressive enhancement: os formulários funcionam antes do JavaScript carregar.                                                                                      |
+| **TypeScript strict**      | O domínio é dinheiro. Um `undefined` silencioso aqui é um saldo errado, e o `strict` transforma isso em erro de compilação.                                                                                                                                                                             |
+| **SQLite + Prisma**        | É um app de uma pessoa numa máquina. Um Postgres seria um processo a mais para operar, backup a mais para configurar e zero benefício: o banco inteiro cabe num arquivo que dá para copiar. O Prisma entra pelo schema declarativo, migrations versionadas e tipos gerados que combinam com o `strict`. |
+| **Tailwind v4**            | Configuração em CSS, com os tokens do design system como fonte única. Cor, no app, tem significado financeiro — e ficar tudo em `globals.css` mantém essa regra num lugar só.                                                                                                                           |
+| **Auth.js**                | Sessão em JWT num cookie httpOnly, sem tabela de sessão e sem servidor de identidade. É o mínimo que fecha o app de verdade.                                                                                                                                                                            |
+| **Recharts**               | Componível em React, sem canvas: os gráficos herdam os tokens de cor e trocam de tema junto com o resto.                                                                                                                                                                                                |
+| **Vitest + Playwright**    | Vitest para as regras, contra um SQLite descartável, em segundos. Playwright para os caminhos que a pessoa percorre, contra o **build de produção** — a diferença já pegou um bug que só existia lá.                                                                                                    |
+
+## Modelo de dados
+
+```mermaid
+erDiagram
+    User ||--o{ Account : tem
+    User ||--o{ Category : tem
+    User ||--o{ Transaction : tem
+    User ||--o{ Budget : tem
+    User ||--o{ Goal : tem
+    User ||--o{ RecurringRule : tem
+
+    Account ||--o{ Transaction : registra
+    Account ||--o| CreditCardDetails : "cartão tem"
+    Account ||--o{ Account : "caixinha pertence a"
+    CreditCardDetails ||--o{ Invoice : fecha
+    Invoice ||--o{ Transaction : agrupa
+
+    Category ||--o{ Category : "subcategoria de"
+    Category ||--o{ Transaction : classifica
+    Category ||--o{ Budget : limita
+    Category ||--o{ CategoryRule : "regra aponta para"
+
+    Goal ||--o| Account : "lastreada na caixinha"
+    RecurringRule ||--o{ RecurringOverride : "ajuste pontual"
+    Transaction }o--o{ Tag : marca
 ```
+
+O detalhe de cada entidade — e o porquê de cada decisão de schema — está em
+[docs/MODELO-DE-DADOS.md](docs/MODELO-DE-DADOS.md).
+
+## Decisões técnicas
+
+### Dinheiro é `Int` em centavos, nunca `Float`
+
+`0,1 + 0,2` não dá `0,3` em ponto flutuante binário. Num app de finanças, esse erro não é
+teórico: ele aparece como um saldo que fecha com um centavo de diferença e destrói a
+confiança na ferramenta inteira. Todo valor é um inteiro de centavos, do banco à API, e só
+vira texto na renderização — `formatBRL(123456)` devolve `R$ 1.234,56`. A entrada aceita o
+que a pessoa digita de verdade (`1.234,56`, `1234.56`, e até `12,50+8`) e converte na
+fronteira.
+
+### Transferência é dupla entrada, não um campo `tipo = TRANSFER`
+
+Mover dinheiro entre contas próprias gera **duas** linhas com o mesmo `transferGroupId`:
+uma negativa na origem, uma positiva no destino, somando zero. Poderia ser uma linha só com
+duas colunas de conta — e aí todo relatório precisaria de um caso especial para não contar
+aquilo como receita ou despesa, e todo saldo precisaria saber ler o campo nos dois sentidos.
+
+Com duas pernas, o saldo de cada conta continua sendo "soma dos lançamentos dela", sem
+exceção. Os relatórios excluem `type = TRANSFER` numa cláusula só. E editar ou apagar uma
+perna mexe nas duas, dentro da mesma transação de banco. O teste que guarda isso é direto:
+uma transferência **não pode** alterar o patrimônio consolidado.
+
+O mesmo raciocínio sustenta as caixinhas das metas: o progresso de uma meta é o saldo de uma
+subconta real, e aportar é uma transferência da conta mãe para ela. Antes disso o progresso
+era anotação — subia na tela sem o dinheiro sair do lugar.
+
+### Importar é um pipeline, e a fonte é uma interface
+
+CSV e OFX não têm código de importação próprio. Cada formato implementa uma interface de
+três campos:
+
+```ts
+interface TransactionSource {
+  id: string;
+  fetchTransactions(params: { accountId: string; since: Date }): Promise<RawTransaction[]>;
+}
+```
+
+A fonte só busca e devolve. Não conhece Prisma, não decide o que é duplicado, não aplica
+regra de categoria e nunca grava. O que vem depois é o mesmo para qualquer origem:
+normalizar → deduplicar por `(provider, externalId)` → categorizar → **revisar** → confirmar.
+
+Isso existe porque a próxima fonte já tem nome: Open Finance. Quando ela chegar, é uma
+classe nova e um `case` no `createSource`; deduplicação, categorização e tela de revisão já
+funcionam para ela. A garantia final contra duplicata não está no código, e sim num índice
+único de `(provider, externalId)` no banco — reimportar o mesmo arquivo é seguro por
+construção. O passo a passo está em [docs/IMPORTACAO.md](docs/IMPORTACAO.md).
+
+## Qualidade
+
+|                                 |                                                                                               |
+| ------------------------------- | --------------------------------------------------------------------------------------------- |
+| Testes unitários e de serviço   | 448, em 26 arquivos, com SQLite descartável                                                   |
+| Testes E2E                      | Playwright, contra o build de produção: login, criar conta, lançar, transferir e importar CSV |
+| Lighthouse (desktop)            | performance 100 · acessibilidade 100 · boas práticas 100                                      |
+| Lighthouse (móvel, 4G simulado) | performance 90 · acessibilidade 100 · boas práticas 100                                       |
+| CI                              | typecheck, lint, unitários e E2E a cada push                                                  |
+
+As regras difíceis vivem em módulos puros, sem banco e sem React: saldo, fatura de cartão,
+ritmo de orçamento, agenda de recorrência, projeção de saldo e o pipeline de importação. É
+por isso que a maior parte da suíte roda em milissegundos. A arquitetura está em
+[docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+
+## Roadmap
+
+- **Open Finance** pela `TransactionSource` que já existe — é a razão de a abstração ter sido
+  construída antes de haver uma segunda fonte de verdade.
+- **PWA com modo offline**, para lançar no mercado sem sinal e sincronizar depois.
+- **Relatório de imposto de renda**, agrupando o ano por categoria no formato que a
+  declaração pede.
+- **Multiusuário opcional**, com escopo por família — o `userId` já atravessa toda query, o
+  que falta é a interface de convite.
+- **Anexo em lançamento**, para guardar a nota fiscal junto da despesa.
 
 ## Abrindo com um clique (Linux)
 
@@ -47,6 +170,37 @@ chmod +x ~/Desktop/"Controle Financeiro.desktop"
 
 Pelo menu de aplicativos ele abre direto. Na área de trabalho, o GNOME exige uma
 autorização única: botão direito no ícone, "Permitir execução".
+
+## Acesso
+
+O app é de uma pessoa só. Na primeira execução, `/login` vira tela de cadastro e cria a
+única conta; depois disso ela volta a ser login e o cadastro fecha. Alternativamente,
+`npm run db:seed` cria o acesso junto com os dados de exemplo — sem `SEED_PASSWORD`, ele
+sorteia uma senha e a imprime uma única vez no terminal.
+
+Esqueceu a senha? `npm run auth:senha` redefine pelo terminal. Quem tem o arquivo do banco
+já pode tudo, então não há segredo perdido aqui — só uma forma de voltar a entrar.
+
+Como funciona por dentro:
+
+- **Auth.js** com provider de credenciais e sessão em JWT, num cookie `httpOnly`,
+  `sameSite=lax`, válido por 30 dias. `trustHost` está ligado porque o app é auto-hospedado;
+  sem isso o Auth.js recusa qualquer host fora da Vercel — e só em produção, já que em
+  desenvolvimento ele confia sozinho. Publicando em endereço aberto, fixe a origem em
+  `AUTH_URL`.
+- **bcrypt com custo 12**, em JavaScript puro — nada de módulo nativo para compilar no
+  Docker. O login compara contra um hash descartável quando o e-mail não existe, para o
+  tempo de resposta não contar quais e-mails estão cadastrados.
+- **Rate limit** de 5 tentativas por minuto por e-mail, com 15 minutos de castigo depois
+  disso. Em memória, que é o suficiente para um app que roda numa máquina só.
+- **Middleware** protege tudo, menos `/login`, `/api/auth/*` e `/api/saude`. As rotas de
+  exportação e de backup entram na proteção: elas despejam o banco inteiro.
+- **Toda query filtra por `userId`**, vindo de `requireUserId()` — o ponto único onde a
+  identidade entra no domínio.
+- **CSP com nonce** e `strict-dynamic`, mais `X-Frame-Options`, `Referrer-Policy`,
+  `Permissions-Policy`, HSTS e as políticas de isolamento de origem. O único script inline
+  fixo, o que aplica o tema antes da primeira pintura, entra por hash — e um teste garante
+  que hash e script não saiam de sincronia.
 
 ## Rodando com Docker
 
@@ -101,37 +255,6 @@ npm run dev
 
 A aplicação sobe em [http://localhost:3000](http://localhost:3000).
 
-## Acesso
-
-O app é de uma pessoa só. Na primeira execução, `/login` vira tela de cadastro e cria a
-única conta; depois disso ela volta a ser login e o cadastro fecha. Alternativamente,
-`npm run db:seed` cria o acesso junto com os dados de exemplo — sem `SEED_PASSWORD`, ele
-sorteia uma senha e a imprime uma única vez no terminal.
-
-Esqueceu a senha? `npm run auth:senha` redefine pelo terminal. Quem tem o arquivo do banco
-já pode tudo, então não há segredo perdido aqui — só uma forma de voltar a entrar.
-
-Como funciona por dentro:
-
-- **Auth.js** com provider de credenciais e sessão em JWT, num cookie `httpOnly`,
-  `sameSite=lax`, válido por 30 dias. `trustHost` está ligado porque o app é auto-hospedado;
-  sem isso o Auth.js recusa qualquer host fora da Vercel — e só em produção, já que em
-  desenvolvimento ele confia sozinho. Publicando em endereço aberto, fixe a origem em
-  `AUTH_URL`.
-- **bcrypt com custo 12**, em JavaScript puro — nada de módulo nativo para compilar no
-  Docker. O login compara contra um hash descartável quando o e-mail não existe, para o
-  tempo de resposta não contar quais e-mails estão cadastrados.
-- **Rate limit** de 5 tentativas por minuto por e-mail, com 15 minutos de castigo depois
-  disso. Em memória, que é o suficiente para um app que roda numa máquina só.
-- **Middleware** protege tudo, menos `/login`, `/api/auth/*` e `/api/saude`. As rotas de
-  exportação e de backup entram na proteção: elas despejam o banco inteiro.
-- **Toda query filtra por `userId`**, vindo de `requireUserId()` — o ponto único onde a
-  identidade entra no domínio.
-- **CSP com nonce** e `strict-dynamic`, mais `X-Frame-Options`, `Referrer-Policy`,
-  `Permissions-Policy`, HSTS e as políticas de isolamento de origem. O único script inline
-  fixo, o que aplica o tema antes da primeira pintura, entra por hash — e um teste garante
-  que hash e script não saiam de sincronia.
-
 ## Scripts
 
 | Script               | Descrição                                         |
@@ -154,6 +277,9 @@ O arquivo SQLite fica em `./data/app.db`, fora do controle de versão (a pasta `
 está no `.gitignore`). A conexão é configurada pela variável `DATABASE_URL` em `.env`,
 a partir do `.env.example`.
 
-## CI
+Exportação completa em CSV e JSON e backup do banco ficam em **Configurações**; a
+restauração está documentada em [docs/IMPORTACAO.md](docs/IMPORTACAO.md).
 
-Todo push roda `typecheck` e `lint` via GitHub Actions (`.github/workflows/ci.yml`).
+## Licença
+
+[MIT](LICENSE).

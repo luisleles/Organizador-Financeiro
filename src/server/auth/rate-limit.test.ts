@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  checkLoginAttempt,
   clearAllLoginAttempts,
   consumeLoginAttempt,
+  peekLoginAttempt,
   resetLoginAttempts,
 } from "./rate-limit";
 
@@ -12,7 +12,7 @@ beforeEach(() => {
   clearAllLoginAttempts();
 });
 
-describe("checkLoginAttempt", () => {
+describe("consumeLoginAttempt", () => {
   it("deixa passar as primeiras tentativas", () => {
     for (let tentativa = 1; tentativa <= 5; tentativa += 1) {
       expect(consumeLoginAttempt("alguem@example.com", AGORA)).toBe(true);
@@ -57,14 +57,26 @@ describe("checkLoginAttempt", () => {
       consumeLoginAttempt("alguem@example.com", AGORA);
     }
 
-    const status = checkLoginAttempt("alguem@example.com", AGORA + 1000);
+    const status = peekLoginAttempt("alguem@example.com", AGORA + 1000);
     expect(status.allowed).toBe(false);
     expect(status.retryAfterMs).toBeGreaterThan(0);
   });
 
-  it("conta quantas tentativas ainda restam", () => {
-    expect(checkLoginAttempt("alguem@example.com", AGORA).remaining).toBe(4);
-    expect(checkLoginAttempt("alguem@example.com", AGORA).remaining).toBe(3);
+  it("consultar não gasta tentativa", () => {
+    expect(peekLoginAttempt("alguem@example.com", AGORA).remaining).toBe(5);
+    expect(peekLoginAttempt("alguem@example.com", AGORA).remaining).toBe(5);
+
+    consumeLoginAttempt("alguem@example.com", AGORA);
+    expect(peekLoginAttempt("alguem@example.com", AGORA).remaining).toBe(4);
+  });
+
+  it("cinco tentativas seguidas de senha errada ainda deixam a sexta correta passar depois da janela", () => {
+    for (let tentativa = 1; tentativa <= 4; tentativa += 1) {
+      consumeLoginAttempt("alguem@example.com", AGORA);
+    }
+
+    // A quinta ainda passa: o limite trava a partir da sexta.
+    expect(consumeLoginAttempt("alguem@example.com", AGORA)).toBe(true);
   });
 
   it("zera o contador depois de um login que deu certo", () => {

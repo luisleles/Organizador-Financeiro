@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
-import { BalanceEvolutionChart } from "@/components/charts/balance-evolution-chart";
-import { CategoryBars } from "@/components/charts/category-bars";
+import { LazyBalanceEvolutionChart, LazyCategoryBars } from "@/components/charts/lazy-chart";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -113,6 +112,7 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
                   />
                   <Link
                     href={`/contas/${account.id}`}
+                    prefetch={false}
                     className="text-texto text-sm hover:underline hover:underline-offset-4"
                   >
                     {account.name}
@@ -151,6 +151,7 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
                     </span>
                     <Link
                       href={`/contas/${bucket.id}`}
+                      prefetch={false}
                       className="text-texto-fraco text-xs hover:underline hover:underline-offset-4"
                     >
                       {bucket.name}
@@ -229,11 +230,11 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Gastos por categoria">
-          <CategoryBars categories={dashboard.categories} totalCents={expensesTotal} />
+          <LazyCategoryBars categories={dashboard.categories} totalCents={expensesTotal} />
         </Card>
 
         <Card title="Evolução do saldo total">
-          <BalanceEvolutionChart points={dashboard.balanceEvolution} />
+          <LazyBalanceEvolutionChart points={dashboard.balanceEvolution} />
         </Card>
       </div>
 

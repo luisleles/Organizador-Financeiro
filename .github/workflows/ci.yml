@@ -5,10 +5,11 @@ on:
   pull_request:
 
 jobs:
-  checks:
+  qualidade:
+    name: Tipos, lint e testes unitários
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: "file:./data/app.db"
+      DATABASE_URL: "file:../data/app.db"
     steps:
       - uses: actions/checkout@v4
 
@@ -22,3 +23,34 @@ jobs:
       - run: npm run lint
 
       - run: npm run typecheck
+
+      - run: npm test
+
+  e2e:
+    name: Testes E2E
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "file:../data/e2e.db"
+      AUTH_SECRET: "segredo-de-teste-e2e-nao-use-em-producao"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Só o Chromium: o app não tem nada específico de navegador, e três engines
+      # triplicariam o tempo da esteira sem cobrir mais nenhum caminho.
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
