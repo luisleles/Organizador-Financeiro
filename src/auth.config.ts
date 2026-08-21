@@ -7,6 +7,16 @@ import type { NextAuthConfig } from "next-auth";
  */
 export const authConfig = {
   pages: { signIn: "/login" },
+  /**
+   * Sem isto o Auth.js recusa qualquer host que não seja Vercel e responde "problema com a
+   * configuração do servidor" — em desenvolvimento ele confia sozinho, então a falha só
+   * aparece no build de produção.
+   *
+   * Confiar no cabeçalho `Host` é seguro aqui porque este app roda numa máquina só, atrás
+   * de localhost ou de um proxy reverso conhecido. Quem publicar em endereço aberto deve
+   * fixar a origem em `AUTH_URL`, e aí o cabeçalho deixa de mandar.
+   */
+  trustHost: true,
   session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 30 },
   providers: [],
   callbacks: {

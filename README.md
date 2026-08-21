@@ -114,7 +114,10 @@ já pode tudo, então não há segredo perdido aqui — só uma forma de voltar 
 Como funciona por dentro:
 
 - **Auth.js** com provider de credenciais e sessão em JWT, num cookie `httpOnly`,
-  `sameSite=lax`, válido por 30 dias.
+  `sameSite=lax`, válido por 30 dias. `trustHost` está ligado porque o app é auto-hospedado;
+  sem isso o Auth.js recusa qualquer host fora da Vercel — e só em produção, já que em
+  desenvolvimento ele confia sozinho. Publicando em endereço aberto, fixe a origem em
+  `AUTH_URL`.
 - **bcrypt com custo 12**, em JavaScript puro — nada de módulo nativo para compilar no
   Docker. O login compara contra um hash descartável quando o e-mail não existe, para o
   tempo de resposta não contar quais e-mails estão cadastrados.
