@@ -1,14 +1,39 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
+import { ChangePasswordForm } from "@/components/settings/change-password-form";
+import { DisplayPreferences } from "@/components/settings/display-preferences";
+import { EraseDataDialog } from "@/components/settings/erase-data-dialog";
+import { SignOutButton } from "@/components/settings/sign-out-button";
 import { Card } from "@/components/ui/card";
+import { auth } from "@/auth";
+import { readValuesHidden } from "@/server/preferences";
 
-export default function ConfiguracoesPage() {
+export const dynamic = "force-dynamic";
+
+export default async function ConfiguracoesPage() {
+  const [session, valuesHidden] = await Promise.all([auth(), readValuesHidden()]);
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Configurações"
-        description="Preferências do aplicativo, exportação de dados e backup."
+        description="Acesso, preferências de exibição, exportação de dados e backup."
+        action={<SignOutButton />}
       />
+
+      <Card title="Conta">
+        <div className="flex flex-col gap-4">
+          <p className="text-texto-fraco text-sm">
+            Entrando como{" "}
+            <span className="text-texto">{session?.user?.email ?? "sessão desconhecida"}</span>. O
+            app é de uma pessoa só: não há outras contas para gerenciar.
+          </p>
+          <ChangePasswordForm />
+        </div>
+      </Card>
+
+      <Card title="Exibição">
+        <DisplayPreferences valuesHidden={valuesHidden} />
+      </Card>
 
       <Card title="Exportar tudo">
         <div className="flex flex-col gap-4">
@@ -44,6 +69,16 @@ export default function ConfiguracoesPage() {
               schema, está em <code className="valor">docs/IMPORTACAO.md</code>.
             </p>
           </div>
+        </div>
+      </Card>
+
+      <Card title="Zona de perigo">
+        <div className="flex flex-col gap-4">
+          <p className="text-texto-fraco text-sm">
+            Apaga todo o histórico financeiro deste app — lançamentos, contas, categorias, tags,
+            orçamentos, metas e recorrências. A conta de acesso continua, e não há como desfazer.
+          </p>
+          <EraseDataDialog />
         </div>
       </Card>
 

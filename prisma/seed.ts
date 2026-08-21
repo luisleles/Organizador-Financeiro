@@ -5,7 +5,9 @@ import {
   RecurringFrequency,
   TransactionType,
 } from "@prisma/client";
+import { randomBytes } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
+import { hashPassword } from "../src/server/auth/password";
 import { toCents } from "../src/lib/money";
 import { invoiceScheduleForPurchase } from "../src/server/accounts/account.credit-card";
 import { YIELD_CATEGORY_NAME } from "../src/server/categories/system-categories";
@@ -148,15 +150,29 @@ const FARMACIAS = ["Drogasil", "Drogaria São Paulo", "Farmácia Pague Menos"];
 const LOJAS = ["Renner", "C&A", "Amazon", "Mercado Livre"];
 const CURSOS = ["Curso Alura", "Curso Udemy", "Material didático"];
 
+/**
+ * O único usuário do app. A senha vem de `SEED_PASSWORD` ou é sorteada e impressa uma vez —
+ * senha fixa em código versionado seria uma senha pública.
+ */
 async function seedUser() {
-  return prisma.user.create({
+  const email = process.env.SEED_EMAIL ?? "usuario@example.com";
+  const password = process.env.SEED_PASSWORD ?? randomBytes(9).toString("base64url");
+
+  const user = await prisma.user.create({
     data: {
-      name: "Usuário Demo",
-      email: "usuario@example.com",
-      // Sem autenticação implementada ainda: placeholder até a fase correspondente.
-      passwordHash: "seed-placeholder-hash",
+      name: process.env.SEED_NAME ?? "Usuário Demo",
+      email: email.trim().toLowerCase(),
+      passwordHash: await hashPassword(password),
     },
   });
+
+  if (!process.env.SEED_PASSWORD) {
+    console.log(
+      `\nAcesso criado: ${email}\nSenha sorteada: ${password}\nAnote agora — ela não é exibida de novo.\n`,
+    );
+  }
+
+  return user;
 }
 
 async function seedAccounts(userId: string) {

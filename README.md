@@ -68,13 +68,24 @@ docker compose exec app npm run db:migrate
 docker compose exec app npm run db:seed
 ```
 
-Para construir a imagem de produção (multi-stage, sem as ferramentas de build na imagem
-final):
+### Produção
+
+`docker-compose.prod.yml` sobe dois serviços: `migrate`, que aplica as migrations e sai, e
+`app`, que só começa depois que o primeiro termina bem.
 
 ```bash
-docker build -t controle-financeiro .
-docker run -p 3000:3000 --env-file .env -v "$(pwd)/data:/app/data" controle-financeiro
+cp .env.example .env
+npx auth secret            # gera o AUTH_SECRET dentro do .env
+docker compose -f docker-compose.prod.yml up -d --build
 ```
+
+A imagem final usa o `output: "standalone"` do Next e não carrega o CLI do Prisma — ele
+tem uma árvore de dependências própria e vive só no estágio `migrate`. O contêiner roda
+como usuário sem privilégios, com sistema de arquivos somente leitura, `no-new-privileges`
+e um healthcheck em `/api/saude`, que responde 503 se o banco não estiver acessível.
+
+A porta é publicada só em `127.0.0.1`. Para expor à internet, ponha um proxy reverso com
+TLS na frente — a sessão vai num cookie, e cookie sem HTTPS é sessão em texto aberto.
 
 ## Rodando sem Docker
 
@@ -82,12 +93,41 @@ Pré-requisitos: Node.js 20 ou superior.
 
 ```bash
 cp .env.example .env
+npx auth secret            # gera o AUTH_SECRET dentro do .env
 npm install
 npm run db:migrate
 npm run dev
 ```
 
 A aplicação sobe em [http://localhost:3000](http://localhost:3000).
+
+## Acesso
+
+O app é de uma pessoa só. Na primeira execução, `/login` vira tela de cadastro e cria a
+única conta; depois disso ela volta a ser login e o cadastro fecha. Alternativamente,
+`npm run db:seed` cria o acesso junto com os dados de exemplo — sem `SEED_PASSWORD`, ele
+sorteia uma senha e a imprime uma única vez no terminal.
+
+Esqueceu a senha? `npm run auth:senha` redefine pelo terminal. Quem tem o arquivo do banco
+já pode tudo, então não há segredo perdido aqui — só uma forma de voltar a entrar.
+
+Como funciona por dentro:
+
+- **Auth.js** com provider de credenciais e sessão em JWT, num cookie `httpOnly`,
+  `sameSite=lax`, válido por 30 dias.
+- **bcrypt com custo 12**, em JavaScript puro — nada de módulo nativo para compilar no
+  Docker. O login compara contra um hash descartável quando o e-mail não existe, para o
+  tempo de resposta não contar quais e-mails estão cadastrados.
+- **Rate limit** de 5 tentativas por minuto por e-mail, com 15 minutos de castigo depois
+  disso. Em memória, que é o suficiente para um app que roda numa máquina só.
+- **Middleware** protege tudo, menos `/login`, `/api/auth/*` e `/api/saude`. As rotas de
+  exportação e de backup entram na proteção: elas despejam o banco inteiro.
+- **Toda query filtra por `userId`**, vindo de `requireUserId()` — o ponto único onde a
+  identidade entra no domínio.
+- **CSP com nonce** e `strict-dynamic`, mais `X-Frame-Options`, `Referrer-Policy`,
+  `Permissions-Policy`, HSTS e as políticas de isolamento de origem. O único script inline
+  fixo, o que aplica o tema antes da primeira pintura, entra por hash — e um teste garante
+  que hash e script não saiam de sincronia.
 
 ## Scripts
 
@@ -102,6 +142,7 @@ A aplicação sobe em [http://localhost:3000](http://localhost:3000).
 | `npm run db:migrate` | Aplica migrations do Prisma em desenvolvimento    |
 | `npm run db:seed`    | Popula o banco com dados iniciais                 |
 | `npm run db:studio`  | Abre o Prisma Studio para inspecionar o banco     |
+| `npm run auth:senha` | Redefine a senha do usuário pelo terminal         |
 | `npm run abrir`      | Sobe o app pronto para uso e abre no navegador    |
 
 ## Banco de dados
