@@ -47,6 +47,13 @@ export type AccountListing = {
   accounts: AccountSummary[];
   /** Consolida apenas as contas ativas: conta arquivada não entra no patrimônio. */
   consolidated: ConsolidatedBalance;
+  /**
+   * Soma do `currentDebtCents` de cada cartão ativo: o que já está lançado na fatura em
+   * aberto e vai fechar no próximo ciclo, ainda que o total da fatura não tenha vencido.
+   * É a informação que o regime de caixa esconde — separado de `consolidated` porque não
+   * é saldo nem passivo consolidado, é uma data.
+   */
+  dueAtNextClosingCents: number;
 };
 
 export function isCreditCard(account: AccountSummary): boolean {
@@ -60,6 +67,8 @@ export type AccountEntry = {
   amountCents: number;
   categoryName: string | null;
   isTransfer: boolean;
+  /** `type === "REFUND"`: devolução de compra, nunca receita. */
+  isRefund: boolean;
   installmentNumber: number | null;
   installmentTotal: number | null;
 };

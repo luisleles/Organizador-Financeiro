@@ -73,6 +73,26 @@ export function TransactionForm({
   const isCreditCard =
     options.accounts.find((account) => account.id === accountId)?.type === "CREDIT_CARD";
 
+  // Cartão não recebe receita: some a opção em vez de deixá-la visível e desabilitada sem
+  // explicação. "Estorno" some do lado de fora do cartão pelo motivo simétrico — só existe
+  // dentro dele.
+  const typeOptions = isCreditCard
+    ? [
+        { value: "EXPENSE", label: "Despesa" },
+        { value: "REFUND", label: "Estorno" },
+      ]
+    : [
+        { value: "EXPENSE", label: "Despesa" },
+        { value: "INCOME", label: "Receita" },
+      ];
+  const rawType = valueOf("type");
+  const effectiveType =
+    isCreditCard && rawType === "INCOME"
+      ? "EXPENSE"
+      : !isCreditCard && rawType === "REFUND"
+        ? "EXPENSE"
+        : rawType;
+
   useEffect(() => {
     if (state.status !== "success") return;
 
@@ -121,18 +141,15 @@ export function TransactionForm({
     <form ref={formRef} action={submit} onKeyDown={handleKeyDown} className="flex flex-col gap-4">
       {transactionId && <input type="hidden" name="transactionId" value={transactionId} />}
 
-      <fieldset className="flex gap-2">
+      <fieldset key={isCreditCard ? "card" : "asset"} className="flex gap-2">
         <legend className="sr-only">Tipo</legend>
-        {[
-          { value: "EXPENSE", label: "Despesa" },
-          { value: "INCOME", label: "Receita" },
-        ].map((option) => (
+        {typeOptions.map((option) => (
           <label key={option.value} className="flex-1">
             <input
               type="radio"
               name="type"
               value={option.value}
-              defaultChecked={valueOf("type") === option.value}
+              defaultChecked={effectiveType === option.value}
               className="peer sr-only"
             />
             <span className="border-linha text-texto-fraco peer-checked:border-tinta peer-checked:bg-superficie peer-checked:text-texto peer-focus-visible:outline-foco block cursor-pointer rounded-md border py-2 text-center text-sm peer-focus-visible:outline-2">

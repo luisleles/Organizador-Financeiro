@@ -207,6 +207,24 @@ describe("materializeDueRecurrences", () => {
     expect(gerados.every((row) => row.accountId === cartaoId)).toBe(true);
     expect(await saldo(contaId)).toBe(500000);
   });
+
+  it("não consegue criar receita em cartão", async () => {
+    await expect(
+      createRecurringRule(
+        regra({ accountId: cartaoId, type: "INCOME", description: "Estorno fixo?" }),
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_OPERATION" });
+  });
+
+  it("também recusa ao editar uma regra existente para receita num cartão", async () => {
+    const ruleId = await createRecurringRule(
+      regra({ accountId: cartaoId, description: "Streaming" }),
+    );
+
+    await expect(
+      updateRecurringRule(ruleId, regra({ accountId: cartaoId, type: "INCOME" })),
+    ).rejects.toMatchObject({ code: "INVALID_OPERATION" });
+  });
 });
 
 describe("listUpcomingOccurrences", () => {

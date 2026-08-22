@@ -8,6 +8,7 @@ import { CreditCardPanel } from "@/components/accounts/credit-card-panel";
 import { HideValuesToggle } from "@/components/accounts/hide-values-toggle";
 import { InvoiceStatement } from "@/components/accounts/invoice-statement";
 import { InvoicePaymentDialog } from "@/components/accounts/invoice-payment-dialog";
+import { RefundDialog } from "@/components/accounts/refund-dialog";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -149,9 +150,9 @@ export default async function ContaPage({ params, searchParams }: ContaPageProps
               : "Extrato"
         }
         action={
-          selectedInvoice ? (
+          card ? (
             <div className="flex flex-wrap items-center gap-2">
-              {selectedIndex >= 0 && invoices?.[selectedIndex + 1] && (
+              {selectedInvoice && selectedIndex >= 0 && invoices?.[selectedIndex + 1] && (
                 <Link
                   className="text-texto-fraco hover:text-texto text-xs"
                   href={`?fatura=${invoices[selectedIndex + 1].id}`}
@@ -159,7 +160,7 @@ export default async function ContaPage({ params, searchParams }: ContaPageProps
                   ← Anterior
                 </Link>
               )}
-              {selectedIndex > 0 && invoices?.[selectedIndex - 1] && (
+              {selectedInvoice && selectedIndex > 0 && invoices?.[selectedIndex - 1] && (
                 <Link
                   className="text-texto-fraco hover:text-texto text-xs"
                   href={`?fatura=${invoices[selectedIndex - 1].id}`}
@@ -167,13 +168,22 @@ export default async function ContaPage({ params, searchParams }: ContaPageProps
                   Próxima →
                 </Link>
               )}
-              <InvoicePaymentDialog
-                invoiceId={selectedInvoice.id}
-                outstandingCents={selectedDebtCents}
-                accounts={assetAccounts}
+              <RefundDialog
+                accountId={account.id}
+                purchases={entries
+                  .filter((entry) => !entry.isTransfer && !entry.isRefund && entry.amountCents < 0)
+                  .slice(0, 30)}
                 today={todayISO()}
-                disabled={selectedDebtCents === 0}
               />
+              {selectedInvoice && (
+                <InvoicePaymentDialog
+                  invoiceId={selectedInvoice.id}
+                  outstandingCents={selectedDebtCents}
+                  accounts={assetAccounts}
+                  today={todayISO()}
+                  disabled={selectedDebtCents === 0}
+                />
+              )}
             </div>
           ) : undefined
         }
@@ -214,6 +224,7 @@ export default async function ContaPage({ params, searchParams }: ContaPageProps
                     <span className="flex items-center gap-2">
                       {entry.description}
                       {entry.isTransfer && <Badge tone="neutro">transferência</Badge>}
+                      {entry.isRefund && <Badge tone="entrada">estorno</Badge>}
                     </span>
                   </TableCell>
                   <TableCell muted className="hidden sm:table-cell">

@@ -17,8 +17,10 @@ test("lança uma despesa e ela entra no extrato", async ({ autenticado: page }) 
   await expect(page.getByRole("table").getByText("Café do teste E2E")).toBeVisible();
 });
 
-test("transferência gera duas pernas e não muda o patrimônio", async ({ autenticado: page }) => {
-  const antes = await saldoLiquido(page);
+test("transferência gera duas pernas e não muda o saldo em contas", async ({
+  autenticado: page,
+}) => {
+  const antes = await saldoEmContas(page);
 
   await page.goto("/transacoes");
   await page.getByRole("button", { name: "Transferir" }).click();
@@ -33,14 +35,14 @@ test("transferência gera duas pernas e não muda o patrimônio", async ({ auten
   // Duas pernas: uma sai de uma conta, a outra entra na outra.
   await expect(page.getByRole("table").getByText("Transferência do teste E2E")).toHaveCount(2);
 
-  // Dinheiro que só muda de bolso não altera o patrimônio.
-  expect(await saldoLiquido(page)).toBe(antes);
+  // Dinheiro que só muda de bolso não altera o saldo em contas.
+  expect(await saldoEmContas(page)).toBe(antes);
 });
 
-/** O número grande do cartão de patrimônio, como texto, para comparar antes e depois. */
-async function saldoLiquido(page: Page): Promise<string> {
+/** O número grande do cartão de saldo, como texto, para comparar antes e depois. */
+async function saldoEmContas(page: Page): Promise<string> {
   await page.goto("/contas");
-  const cartao = page.getByRole("region").filter({ hasText: "Saldo líquido" }).first();
+  const cartao = page.getByRole("region").filter({ hasText: "Saldo em contas" }).first();
   const alvo = (await cartao.count()) > 0 ? cartao : page.locator("body");
   return (await alvo.innerText()).replace(/\s+/g, " ").slice(0, 200);
 }

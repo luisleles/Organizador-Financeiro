@@ -2,11 +2,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { prisma } from "@/lib/prisma";
 import { getAccountDetail, listAccounts } from "@/server/accounts/account.service";
 import { consolidateBalances } from "@/server/accounts/account.balance";
+import { AccountOperationError } from "@/server/accounts/account.operations";
 import {
   createTransaction,
   createTransfer,
   deleteTransactions,
   payInvoice,
+  registerRefund,
   updateTransaction,
 } from "./transaction.service";
 
@@ -120,7 +122,7 @@ describe("guardas de transferência", () => {
         toAccountId: checkingId,
         notes: null,
       }),
-    ).rejects.toMatchObject({ code: "CREDIT_CARD_AS_SOURCE" });
+    ).rejects.toMatchObject({ code: "TRANSFER_ON_CREDIT_CARD" });
   });
 
   it("rejeita transferência entre dois cartões", async () => {
@@ -133,7 +135,7 @@ describe("guardas de transferência", () => {
         toAccountId: secondCardId,
         notes: null,
       }),
-    ).rejects.toMatchObject({ code: "CREDIT_CARD_AS_SOURCE" });
+    ).rejects.toMatchObject({ code: "TRANSFER_ON_CREDIT_CARD" });
   });
 });
 
@@ -390,7 +392,7 @@ describe("pagamento de fatura", () => {
       date: "2026-08-14",
       description: "Estorno",
       amountCents: 3_000,
-      type: "INCOME",
+      type: "REFUND",
       accountId: cardId,
       categoryId: null,
       tagIds: [],
@@ -426,5 +428,209 @@ describe("pagamento de fatura", () => {
     const closed = await listAccounts();
     const cardClosed = closed.accounts.find((account) => account.id === cardId)!.creditCard!;
     expect(cardClosed.availableLimitCents).toBe(996_000);
+  });
+});
+
+describe("dashboard: saldo em contas e faturas em aberto", () => {
+  it("compra no cartão não altera assetsBalanceCents", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    const before = await listAccounts();
+
+    await purchase("2026-08-10", 10_000);
+
+    const after = await listAccounts();
+    expect(after.consolidated.assetsBalanceCents).toBe(before.consolidated.assetsBalanceCents);
+    expect(after.consolidated.openInvoicesCents).toBe(
+      before.consolidated.openInvoicesCents + 10_000,
+    );
+  });
+
+  it("pagar fatura reduz assetsBalanceCents e reduz o bloco de faturas", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await purchase("2026-08-10", 10_000);
+    const invoice = await prisma.invoice.findFirstOrThrow();
+    const before = await listAccounts();
+
+    await payInvoice(invoice.id, checkingId, 10_000, new Date("2026-08-12T03:00:00.000Z"));
+
+    const after = await listAccounts();
+    expect(after.consolidated.assetsBalanceCents).toBe(
+      before.consolidated.assetsBalanceCents - 10_000,
+    );
+    expect(after.consolidated.openInvoicesCents).toBe(
+      before.consolidated.openInvoicesCents - 10_000,
+    );
+  });
+
+  it("dueAtNextClosingCents soma o que cada cartão ativo já lançou na fatura em aberto", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await purchase("2026-08-10", 10_000, 1, cardId);
+    await purchase("2026-08-10", 5_000, 1, secondCardId);
+
+    const { dueAtNextClosingCents } = await listAccounts();
+    expect(dueAtNextClosingCents).toBe(15_000);
+  });
+
+  it("fatura já fechada não conta como 'vence no próximo fechamento'", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await purchase("2026-08-10", 10_000, 1, cardId);
+
+    // Passa do fechamento do dia 20: a compra sai da fatura corrente, entra na fechada.
+    freeze("2026-08-25T12:00:00Z");
+    const { dueAtNextClosingCents } = await listAccounts();
+    expect(dueAtNextClosingCents).toBe(0);
+  });
+});
+
+describe("restrição de operação por classe de conta", () => {
+  it("rejeita receita lançada direto num cartão", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await expect(
+      createTransaction({
+        date: "2026-08-10",
+        description: "Salário",
+        amountCents: 5_000,
+        type: "INCOME",
+        accountId: cardId,
+        categoryId: null,
+        tagIds: [],
+        notes: null,
+        installments: 1,
+        installmentScope: "SINGLE",
+      }),
+    ).rejects.toMatchObject({ code: "INCOME_ON_CREDIT_CARD" });
+  });
+
+  it("rejeita receita ao editar um lançamento para dentro de um cartão", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    const id = await purchase("2026-08-10", 5_000);
+
+    await expect(
+      updateTransaction(id, {
+        date: "2026-08-10",
+        description: "Virou receita",
+        amountCents: 5_000,
+        type: "INCOME",
+        accountId: cardId,
+        categoryId: null,
+        tagIds: [],
+        notes: null,
+        installments: 1,
+        installmentScope: "SINGLE",
+      }),
+    ).rejects.toMatchObject({ code: "INCOME_ON_CREDIT_CARD" });
+  });
+
+  it("payInvoice continua funcionando normalmente", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await purchase("2026-08-10", 10_000);
+    const invoice = await prisma.invoice.findFirstOrThrow();
+
+    const transferGroupId = await payInvoice(
+      invoice.id,
+      checkingId,
+      10_000,
+      new Date("2026-08-12T03:00:00.000Z"),
+    );
+
+    expect(transferGroupId).toBeTruthy();
+    const paidInvoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(paidInvoice.paidAt?.toISOString()).toBe("2026-08-12T03:00:00.000Z");
+  });
+});
+
+describe("estorno", () => {
+  it("entra no cartão, reduz a fatura e libera limite", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await purchase("2026-08-10", 10_000);
+    const before = await listAccounts();
+    const cardBefore = before.accounts.find((account) => account.id === cardId)!.creditCard!;
+
+    const result = await registerRefund(
+      cardId,
+      4_000,
+      new Date("2026-08-11T03:00:00.000Z"),
+      "Devolução",
+    );
+
+    const after = await listAccounts();
+    const cardAfter = after.accounts.find((account) => account.id === cardId)!.creditCard!;
+    expect(result.installmentNotice).toBeNull();
+    expect(cardAfter.availableLimitCents).toBe(cardBefore.availableLimitCents + 4_000);
+    expect(after.consolidated.openInvoicesCents).toBe(
+      before.consolidated.openInvoicesCents - 4_000,
+    );
+  });
+
+  it("é rejeitado fora de conta de cartão de crédito", async () => {
+    await expect(
+      registerRefund(checkingId, 1_000, new Date("2026-08-11T03:00:00.000Z"), "Devolução"),
+    ).rejects.toMatchObject({ code: "REFUND_REQUIRES_CREDIT_CARD" });
+  });
+
+  it("não aparece como receita em nenhum relatório", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await purchase("2026-08-10", 10_000);
+    await registerRefund(cardId, 4_000, new Date("2026-08-11T03:00:00.000Z"), "Devolução");
+
+    const listing = await prisma.transaction.aggregate({
+      where: { type: "INCOME" },
+      _sum: { amountCents: true },
+      _count: true,
+    });
+    expect(listing._count).toBe(0);
+    expect(listing._sum.amountCents).toBeNull();
+  });
+
+  it("avisa que o vínculo com compra parcelada é só informativo", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    const originalId = await purchase("2026-08-10", 9_000, 3);
+
+    const result = await registerRefund(
+      cardId,
+      3_000,
+      new Date("2026-08-11T03:00:00.000Z"),
+      "Devolução de uma parcela",
+      originalId,
+    );
+
+    expect(result.installmentNotice).toMatch(/parcelas restantes/);
+
+    const remaining = await prisma.transaction.count({
+      where: { installmentGroupId: { not: null } },
+    });
+    expect(remaining).toBe(3);
+  });
+
+  it("permite vincular à compra original para rastreabilidade", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    const originalId = await purchase("2026-08-10", 10_000);
+
+    const result = await registerRefund(
+      cardId,
+      10_000,
+      new Date("2026-08-11T03:00:00.000Z"),
+      "Devolução total",
+      originalId,
+    );
+
+    const stored = await prisma.transaction.findUniqueOrThrow({ where: { id: result.id } });
+    expect(stored.refundOfId).toBe(originalId);
+    expect(stored.type).toBe("REFUND");
+  });
+});
+
+describe("transferência avulsa com cartão em qualquer ponta", () => {
+  it("rejeita quando o cartão é o destino", async () => {
+    await expect(
+      createTransfer({
+        date: "2026-08-10",
+        description: "Inválida",
+        amountCents: 1000,
+        fromAccountId: checkingId,
+        toAccountId: cardId,
+        notes: null,
+      }),
+    ).rejects.toBeInstanceOf(AccountOperationError);
   });
 });

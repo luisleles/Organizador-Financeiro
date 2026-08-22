@@ -111,16 +111,22 @@ export async function listAccounts(
       };
     });
 
+  const activeSummaries = summaries.filter((summary) => !summary.archived);
+
   return {
     accounts: topLevel,
     // Consolida cada conta uma vez só — a mãe pelo saldo próprio, a caixinha pelo dela.
     consolidated: consolidateBalances(
-      summaries
-        .filter((summary) => !summary.archived)
-        .map((summary) => ({
-          balanceCents: summary.balanceCents,
-          isCreditCard: summary.class === "LIABILITY",
-        })),
+      activeSummaries.map((summary) => ({
+        balanceCents: summary.balanceCents,
+        isCreditCard: summary.class === "LIABILITY",
+      })),
+    ),
+    // Soma o que cada cartão ativo já lançou na fatura em aberto, não a dívida total do
+    // cartão — por isso não sai de `consolidateBalances`, que olha só o saldo acumulado.
+    dueAtNextClosingCents: activeSummaries.reduce(
+      (total, summary) => total + Math.abs(summary.creditCard?.currentDebtCents ?? 0),
+      0,
     ),
   };
 }
@@ -392,7 +398,7 @@ function toEntry(transaction: {
   date: Date;
   description: string;
   amountCents: number;
-  type: "INCOME" | "EXPENSE" | "TRANSFER";
+  type: "INCOME" | "EXPENSE" | "TRANSFER" | "REFUND";
   installmentNumber: number | null;
   installmentTotal: number | null;
   category: { name: string } | null;
@@ -404,6 +410,7 @@ function toEntry(transaction: {
     amountCents: transaction.amountCents,
     categoryName: transaction.category?.name ?? null,
     isTransfer: transaction.type === "TRANSFER",
+    isRefund: transaction.type === "REFUND",
     installmentNumber: transaction.installmentNumber,
     installmentTotal: transaction.installmentTotal,
   };

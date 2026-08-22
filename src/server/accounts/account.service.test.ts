@@ -133,7 +133,7 @@ describe("assets + liabilities == netWorth", () => {
       date: "2026-08-12",
       description: "Estorno",
       amountCents: 15_000,
-      type: "INCOME",
+      type: "REFUND",
       accountId: cardId,
       categoryId: null,
       tagIds: [],

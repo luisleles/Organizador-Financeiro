@@ -28,16 +28,22 @@ export async function confirmImportAction(payload: unknown): Promise<ActionState
   if (!parsed.success) return actionError(firstIssue(parsed.error));
 
   try {
-    const { createdCount, skippedCount } = await confirmImport(parsed.data);
+    const { createdCount, skippedCount, rejectedCount } = await confirmImport(parsed.data);
     revalidatePath("/transacoes");
     revalidatePath("/contas");
     revalidatePath("/");
 
-    return actionSuccess(
-      skippedCount === 0
-        ? `${createdCount} ${createdCount === 1 ? "lançamento importado" : "lançamentos importados"}.`
-        : `${createdCount} importados; ${skippedCount} já existiam e foram ignorados.`,
-    );
+    const partes = [
+      `${createdCount} ${createdCount === 1 ? "lançamento importado" : "lançamentos importados"}.`,
+    ];
+    if (skippedCount > 0) partes.push(`${skippedCount} já existiam e foram ignorados.`);
+    if (rejectedCount > 0) {
+      partes.push(
+        `${rejectedCount} ${rejectedCount === 1 ? "linha entraria como receita num cartão e foi recusada" : "linhas entrariam como receita num cartão e foram recusadas"}.`,
+      );
+    }
+
+    return actionSuccess(partes.join(" "));
   } catch (error) {
     if (error instanceof ImportServiceError) return actionError(error.message);
     throw error;

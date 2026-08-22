@@ -56,6 +56,7 @@ const TYPE_LABELS = {
   INCOME: "Entrada",
   EXPENSE: "Saída",
   TRANSFER: "Transferência",
+  REFUND: "Estorno",
 } as const;
 
 /**

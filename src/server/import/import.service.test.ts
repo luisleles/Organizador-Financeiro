@@ -191,6 +191,35 @@ describe("confirmImport", () => {
     expect(await gravadas()).toHaveLength(3);
   });
 
+  it("respeita a regra de operação por classe de conta: linha positiva num cartão não vira receita", async () => {
+    const cartao = await prisma.account.create({
+      data: {
+        userId,
+        name: "Cartão",
+        type: "CREDIT_CARD",
+        class: "LIABILITY",
+        initialBalanceCents: 0,
+        color: "#B0234A",
+        icon: "credit-card",
+        creditCardDetails: { create: { closingDay: 20, dueDay: 28, creditLimitCents: 1_000_000 } },
+      },
+    });
+
+    const { rows } = await previewImport(pedido({ accountId: cartao.id }));
+    const result = await confirmImport({
+      sourceId: "csv",
+      accountId: cartao.id,
+      rows: rows.map(toConfirmRow),
+    });
+
+    // Só a linha de salário (positiva) é recusada; as duas despesas entram normalmente.
+    expect(result.createdCount).toBe(2);
+    expect(result.rejectedCount).toBe(1);
+    const salvas = await prisma.transaction.findMany({ where: { accountId: cartao.id } });
+    expect(salvas.every((row) => row.type !== "INCOME")).toBe(true);
+    expect(salvas).toHaveLength(2);
+  });
+
   it("respeita a categoria escolhida na revisão, mesmo contra a regra", async () => {
     const outra = await prisma.category.create({
       data: { userId, name: "Lazer", kind: "EXPENSE", color: "#7A5AF8", icon: "smile" },

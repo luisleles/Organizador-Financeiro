@@ -17,7 +17,13 @@ const notes = z
   .optional()
   .transform((value) => value || null);
 
-export const ENTRY_TYPES = ["INCOME", "EXPENSE"] as const;
+/**
+ * `REFUND` entra aqui porque o formulário de lançamento é o mesmo para os dois: só troca a
+ * opção que aparece ("Receita" vira "Estorno") quando a conta escolhida é um cartão. Quem
+ * garante que `REFUND` só vale em cartão é `assertOperationAllowed`, no serviço — este
+ * schema só aceita a forma, não decide se a conta pode.
+ */
+export const ENTRY_TYPES = ["INCOME", "EXPENSE", "REFUND"] as const;
 
 export const transactionInputSchema = z.object({
   date: isoDate,

@@ -18,7 +18,7 @@ export default async function ContasPage({ searchParams }: ContasPageProps) {
   const params = await searchParams;
   const includeArchived = params.arquivadas === "1";
 
-  const [{ accounts, consolidated }, valuesHidden] = await Promise.all([
+  const [{ accounts, consolidated, dueAtNextClosingCents }, valuesHidden] = await Promise.all([
     listAccounts({ includeArchived }),
     readValuesHidden(),
   ]);
@@ -39,6 +39,7 @@ export default async function ContasPage({ searchParams }: ContasPageProps) {
 
       <ConsolidatedBalanceCard
         consolidated={consolidated}
+        dueAtNextClosingCents={dueAtNextClosingCents}
         activeAccountCount={activeAccountCount}
         valuesHidden={valuesHidden}
       />

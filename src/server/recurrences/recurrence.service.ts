@@ -10,6 +10,11 @@ import {
 import { prisma } from "@/lib/prisma";
 import { invoiceScheduleForPurchase } from "@/server/accounts/account.credit-card";
 import { isBucket, splitParentBalance } from "@/server/accounts/account.buckets";
+import {
+  AccountOperationError,
+  OPERATION_RULE_MESSAGES,
+  validateOperation,
+} from "@/server/accounts/account.operations";
 import { requireUserId } from "@/server/current-user";
 import { createTransaction } from "@/server/transactions/transaction.service";
 import {
@@ -38,7 +43,8 @@ export const RECURRENCE_PROVIDER = "recorrencia";
 export const UPCOMING_WINDOW_DAYS = 30;
 export const PROJECTION_WINDOW_DAYS = 90;
 
-export type RecurrenceErrorCode = "NOT_FOUND" | "BUCKET_ACCOUNT" | "ALREADY_MATERIALIZED";
+export type RecurrenceErrorCode =
+  "NOT_FOUND" | "BUCKET_ACCOUNT" | "ALREADY_MATERIALIZED" | "INVALID_OPERATION";
 
 export class RecurrenceServiceError extends Error {
   constructor(
@@ -74,7 +80,7 @@ export async function listRecurringRules(
 
 export async function createRecurringRule(input: RecurringRuleInput): Promise<string> {
   const userId = await requireUserId();
-  await assertUsableAccount(userId, input.accountId);
+  await assertUsableAccount(userId, input.accountId, input.type, input.amountCents);
 
   const created = await prisma.recurringRule.create({
     data: { ...ruleData(input), userId },
@@ -89,7 +95,7 @@ export async function updateRecurringRule(
   input: RecurringRuleInput,
 ): Promise<void> {
   const userId = await requireUserId();
-  await assertUsableAccount(userId, input.accountId);
+  await assertUsableAccount(userId, input.accountId, input.type, input.amountCents);
 
   const { count } = await prisma.recurringRule.updateMany({
     where: { id: ruleId, userId },
@@ -437,6 +443,10 @@ async function createOccurrenceTransaction(
     // Corrida entre duas rodadas: quem perdeu encontra a ocorrência já gravada e segue.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
       return false;
+    // Defesa em profundidade: a regra já barra isto na criação da regra. Uma regra antiga
+    // que driblou aquela checagem (dado migrado à mão, por exemplo) não trava a rodada
+    // inteira — só esta ocorrência fica de fora.
+    if (error instanceof AccountOperationError) return false;
     throw error;
   }
 }
@@ -524,10 +534,15 @@ function ruleData(input: RecurringRuleInput) {
   };
 }
 
-async function assertUsableAccount(userId: string, accountId: string): Promise<void> {
+async function assertUsableAccount(
+  userId: string,
+  accountId: string,
+  type: "INCOME" | "EXPENSE",
+  amountCents: number,
+): Promise<void> {
   const account = await prisma.account.findFirst({
     where: { id: accountId, userId },
-    select: { type: true },
+    select: { id: true, type: true, class: true, parentAccountId: true },
   });
   if (!account) throw notFound();
 
@@ -536,6 +551,13 @@ async function assertUsableAccount(userId: string, accountId: string): Promise<v
       "BUCKET_ACCOUNT",
       "Caixinha só recebe aporte e rendimento pela meta. Escolha a conta mãe.",
     );
+  }
+
+  // Mesma regra de "o que esta conta aceita" que vale para lançamento manual: uma
+  // recorrência não pode criar receita num cartão de crédito.
+  const violation = validateOperation(account, type, amountCents);
+  if (violation) {
+    throw new RecurrenceServiceError("INVALID_OPERATION", OPERATION_RULE_MESSAGES[violation]);
   }
 }
 
