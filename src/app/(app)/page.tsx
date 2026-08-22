@@ -23,12 +23,13 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
   const params = toSearchParams(await searchParams);
   const period = resolvePeriod(parsePeriod(params));
 
-  const [dashboard, { accounts, consolidated }, budgets, valuesHidden] = await Promise.all([
-    getDashboard(period),
-    listAccounts(),
-    getMonthlyBudgets(currentMonth()),
-    readValuesHidden(),
-  ]);
+  const [dashboard, { accounts, consolidated, dueAtNextClosingCents }, budgets, valuesHidden] =
+    await Promise.all([
+      getDashboard(period),
+      listAccounts(),
+      getMonthlyBudgets(currentMonth()),
+      readValuesHidden(),
+    ]);
 
   const overBudget = budgets.rows.filter((row) => row.progress.status === "estourado");
 
@@ -72,6 +73,7 @@ export default async function InicioPage({ searchParams }: InicioPageProps) {
 
       <ConsolidatedBalanceCard
         consolidated={consolidated}
+        dueAtNextClosingCents={dueAtNextClosingCents}
         activeAccountCount={accounts.length}
         valuesHidden={valuesHidden}
       />

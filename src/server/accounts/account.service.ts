@@ -111,16 +111,22 @@ export async function listAccounts(
       };
     });
 
+  const activeSummaries = summaries.filter((summary) => !summary.archived);
+
   return {
     accounts: topLevel,
     // Consolida cada conta uma vez só — a mãe pelo saldo próprio, a caixinha pelo dela.
     consolidated: consolidateBalances(
-      summaries
-        .filter((summary) => !summary.archived)
-        .map((summary) => ({
-          balanceCents: summary.balanceCents,
-          isCreditCard: summary.class === "LIABILITY",
-        })),
+      activeSummaries.map((summary) => ({
+        balanceCents: summary.balanceCents,
+        isCreditCard: summary.class === "LIABILITY",
+      })),
+    ),
+    // Soma o que cada cartão ativo já lançou na fatura em aberto, não a dívida total do
+    // cartão — por isso não sai de `consolidateBalances`, que olha só o saldo acumulado.
+    dueAtNextClosingCents: activeSummaries.reduce(
+      (total, summary) => total + Math.abs(summary.creditCard?.currentDebtCents ?? 0),
+      0,
     ),
   };
 }

@@ -428,3 +428,54 @@ describe("pagamento de fatura", () => {
     expect(cardClosed.availableLimitCents).toBe(996_000);
   });
 });
+
+describe("dashboard: saldo em contas e faturas em aberto", () => {
+  it("compra no cartão não altera assetsBalanceCents", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    const before = await listAccounts();
+
+    await purchase("2026-08-10", 10_000);
+
+    const after = await listAccounts();
+    expect(after.consolidated.assetsBalanceCents).toBe(before.consolidated.assetsBalanceCents);
+    expect(after.consolidated.openInvoicesCents).toBe(
+      before.consolidated.openInvoicesCents + 10_000,
+    );
+  });
+
+  it("pagar fatura reduz assetsBalanceCents e reduz o bloco de faturas", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await purchase("2026-08-10", 10_000);
+    const invoice = await prisma.invoice.findFirstOrThrow();
+    const before = await listAccounts();
+
+    await payInvoice(invoice.id, checkingId, 10_000, new Date("2026-08-12T03:00:00.000Z"));
+
+    const after = await listAccounts();
+    expect(after.consolidated.assetsBalanceCents).toBe(
+      before.consolidated.assetsBalanceCents - 10_000,
+    );
+    expect(after.consolidated.openInvoicesCents).toBe(
+      before.consolidated.openInvoicesCents - 10_000,
+    );
+  });
+
+  it("dueAtNextClosingCents soma o que cada cartão ativo já lançou na fatura em aberto", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await purchase("2026-08-10", 10_000, 1, cardId);
+    await purchase("2026-08-10", 5_000, 1, secondCardId);
+
+    const { dueAtNextClosingCents } = await listAccounts();
+    expect(dueAtNextClosingCents).toBe(15_000);
+  });
+
+  it("fatura já fechada não conta como 'vence no próximo fechamento'", async () => {
+    freeze("2026-08-10T12:00:00Z");
+    await purchase("2026-08-10", 10_000, 1, cardId);
+
+    // Passa do fechamento do dia 20: a compra sai da fatura corrente, entra na fechada.
+    freeze("2026-08-25T12:00:00Z");
+    const { dueAtNextClosingCents } = await listAccounts();
+    expect(dueAtNextClosingCents).toBe(0);
+  });
+});
