@@ -23,10 +23,14 @@ import {
 } from "./report.aggregations";
 
 /**
- * Transferência fica de fora de tudo que é receita ou despesa. Este filtro é a única
- * forma de montar a cláusula desses relatórios — se aparecer uma consulta sem ele, é bug.
+ * Transferência e estorno ficam de fora de tudo que é receita ou despesa. Estorno é
+ * devolução de compra no cartão, não receita, mesmo entrando positivo no ledger — este
+ * filtro é a única forma de montar a cláusula desses relatórios; se aparecer uma consulta
+ * sem ele, é bug.
  */
-const NOT_TRANSFER = { type: { not: "TRANSFER" } } satisfies Prisma.TransactionWhereInput;
+const NOT_TRANSFER = {
+  type: { notIn: ["TRANSFER", "REFUND"] },
+} satisfies Prisma.TransactionWhereInput;
 
 const CATEGORY_LIMIT = 8;
 const TOP_EXPENSES = 6;

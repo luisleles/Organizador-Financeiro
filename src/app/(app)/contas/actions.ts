@@ -20,7 +20,12 @@ import {
 import { accountIdSchema, accountInputSchema } from "@/server/accounts/account.schema";
 import { writeValuesHidden } from "@/server/preferences";
 import { fromZonedParts } from "@/lib/date";
-import { TransactionServiceError, payInvoice } from "@/server/transactions/transaction.service";
+import { AccountOperationError } from "@/server/accounts/account.operations";
+import {
+  TransactionServiceError,
+  payInvoice,
+  registerRefund,
+} from "@/server/transactions/transaction.service";
 
 const brlToCents = z
   .string()
@@ -194,6 +199,44 @@ export async function payInvoiceAction(
   return actionSuccess("Pagamento registrado.");
 }
 
+export async function registerRefundAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const accountId = readText(formData, "accountId");
+  const description = readText(formData, "description");
+  const dateText = readText(formData, "date");
+  const parsedAmount = brlToCents.safeParse(readText(formData, "amountCents"));
+  const originalTransactionId = readText(formData, "originalTransactionId") || null;
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText);
+  if (!accountId || !description || !dateMatch || !parsedAmount.success) {
+    return actionError("Revise os dados do estorno.");
+  }
+
+  try {
+    const result = await registerRefund(
+      accountId,
+      Math.abs(parsedAmount.data),
+      fromZonedParts({
+        year: Number(dateMatch[1]),
+        month: Number(dateMatch[2]),
+        day: Number(dateMatch[3]),
+      }),
+      description,
+      originalTransactionId,
+    );
+    revalidatePath("/contas", "layout");
+    revalidatePath("/transacoes");
+    return actionSuccess(
+      result.installmentNotice
+        ? `Estorno registrado. ${result.installmentNotice}`
+        : "Estorno registrado.",
+    );
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
 function readAccountForm(formData: FormData) {
   return {
     name: readText(formData, "name"),
@@ -223,6 +266,7 @@ function invalidForm(error: z.ZodError, values: Record<string, string>): ActionS
 function toActionError(error: unknown): ActionState {
   if (error instanceof AccountServiceError) return actionError(error.message);
   if (error instanceof TransactionServiceError) return actionError(error.message);
+  if (error instanceof AccountOperationError) return actionError(error.message);
   throw error;
 }
 

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type { ResolvedPeriod } from "@/lib/period";
 import { splitParentBalance } from "@/server/accounts/account.buckets";
 import { getMonthlyBudgets, setBudget } from "@/server/budgets/budget.service";
-import { createTransfer } from "@/server/transactions/transaction.service";
+import { createTransaction, createTransfer } from "@/server/transactions/transaction.service";
 import {
   GoalServiceError,
   createBucketForGoal,
@@ -285,6 +285,25 @@ describe("caixinha só movimenta com a conta mãe", () => {
         notes: null,
       }),
     ).rejects.toMatchObject({ code: "BUCKET_RULE" });
+  });
+
+  it("recusa despesa avulsa lançada direto na caixinha", async () => {
+    await depositToGoal({ goalId, amountCents: 100000, date: HOJE });
+
+    await expect(
+      createTransaction({
+        date: HOJE,
+        description: "Compra direto na caixinha",
+        amountCents: 1000,
+        type: "EXPENSE",
+        accountId: await bucketId(),
+        categoryId: null,
+        tagIds: [],
+        notes: null,
+        installments: 1,
+        installmentScope: "SINGLE",
+      }),
+    ).rejects.toMatchObject({ code: "LOOSE_ENTRY_IN_BUCKET" });
   });
 });
 

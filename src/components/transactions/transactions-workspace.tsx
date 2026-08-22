@@ -223,6 +223,7 @@ export function TransactionsWorkspace({
           </span>
         )}
         {row.invoiceId && row.transferGroupId && <Badge tone="neutro">pagamento de fatura</Badge>}
+        {row.type === "REFUND" && <Badge tone="entrada">estorno</Badge>}
       </TableCell>
       <TableCell muted className="hidden md:table-cell">
         {row.type === "TRANSFER" ? (

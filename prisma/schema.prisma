@@ -31,6 +31,9 @@ enum TransactionType {
   INCOME
   EXPENSE
   TRANSFER
+  /// Devolução de uma compra no cartão. Nunca é receita: entra positivo na conta, reduz a
+  /// fatura e libera limite, mas fica de fora de todo relatório de receita.
+  REFUND
 }
 
 enum RecurringFrequency {
@@ -106,7 +109,7 @@ model CreditCardDetails {
 /// saldo zerado por coincidência de estorno não vira "paga" à toa. Ver
 /// `invoicePaymentStatus` para a derivação completa.
 model Invoice {
-  id                     String   @id @default(cuid())
+  id                     String    @id @default(cuid())
   creditCardDetailsId    String
   referenceMonth         DateTime
   closingDate            DateTime
@@ -195,6 +198,11 @@ model Transaction {
   installmentNumber  Int?
   installmentTotal   Int?
 
+  /// Vínculo só informativo de um `REFUND` com a compra original, no mesmo espírito de
+  /// `installmentGroupId`: não é chave estrangeira, para que apagar a compra nunca apague
+  /// nem trave o estorno que ela gerou.
+  refundOfId String?
+
   notes      String?
   provider   String?
   externalId String?
@@ -213,6 +221,7 @@ model Transaction {
   @@index([accountId, date])
   @@index([invoiceId])
   @@index([installmentGroupId, installmentNumber])
+  @@index([refundOfId])
 }
 
 model Budget {

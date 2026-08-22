@@ -17,6 +17,7 @@ import {
   transactionInputSchema,
   transferInputSchema,
 } from "@/server/transactions/transaction.schema";
+import { AccountOperationError } from "@/server/accounts/account.operations";
 import {
   TransactionServiceError,
   categorizeTransactions,
@@ -283,6 +284,7 @@ function invalidForm(error: z.ZodError, values: Record<string, unknown>): Action
 
 function toActionError(error: unknown): ActionState {
   if (error instanceof TransactionServiceError) return actionError(error.message);
+  if (error instanceof AccountOperationError) return actionError(error.message);
   throw error;
 }
 

@@ -67,6 +67,8 @@ export type AccountEntry = {
   amountCents: number;
   categoryName: string | null;
   isTransfer: boolean;
+  /** `type === "REFUND"`: devolução de compra, nunca receita. */
+  isRefund: boolean;
   installmentNumber: number | null;
   installmentTotal: number | null;
 };

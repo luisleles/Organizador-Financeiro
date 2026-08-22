@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { fromISODate } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
+import { AccountOperationError } from "@/server/accounts/account.operations";
 import { requireUserId } from "@/server/current-user";
 import { createTransaction } from "@/server/transactions/transaction.service";
 import { CsvSource } from "./csv.source";
@@ -25,6 +26,12 @@ export type ImportResult = {
   createdCount: number;
   /** Linhas que outra importação já tinha gravado enquanto esta estava aberta. */
   skippedCount: number;
+  /**
+   * Linhas que a regra de operação por classe de conta recusou — hoje, só receita
+   * (valor positivo) num extrato de cartão de crédito. Não é duplicidade: é o mesmo
+   * `assertOperationAllowed` de todo lançamento manual, aplicado aqui também.
+   */
+  rejectedCount: number;
 };
 
 /**
@@ -96,6 +103,7 @@ export async function confirmImport(input: ConfirmImportInput): Promise<ImportRe
 
   let createdCount = 0;
   let skippedCount = 0;
+  let rejectedCount = 0;
 
   for (const row of input.rows) {
     try {
@@ -120,11 +128,18 @@ export async function confirmImport(input: ConfirmImportInput): Promise<ImportRe
         skippedCount += 1;
         continue;
       }
+      // Mesma regra de qualquer lançamento manual: um extrato de cartão com valor
+      // positivo (comum em fatura com estorno já líquido) não vira receita direto — a
+      // linha fica de fora, sem travar o resto da importação.
+      if (error instanceof AccountOperationError) {
+        rejectedCount += 1;
+        continue;
+      }
       throw error;
     }
   }
 
-  return { createdCount, skippedCount };
+  return { createdCount, skippedCount, rejectedCount };
 }
 
 async function assertAccount(userId: string, accountId: string): Promise<void> {

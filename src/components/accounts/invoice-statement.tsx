@@ -84,6 +84,7 @@ export function InvoiceStatement({ invoices, accountName, valuesHidden }: Invoic
                 <span className="flex items-center gap-2">
                   {entry.description}
                   {entry.isTransfer && <Badge tone="neutro">pagamento</Badge>}
+                  {entry.isRefund && <Badge tone="entrada">estorno</Badge>}
                 </span>
               </TableCell>
               <TableCell muted className="hidden sm:table-cell">

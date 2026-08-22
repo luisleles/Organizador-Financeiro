@@ -398,7 +398,7 @@ function toEntry(transaction: {
   date: Date;
   description: string;
   amountCents: number;
-  type: "INCOME" | "EXPENSE" | "TRANSFER";
+  type: "INCOME" | "EXPENSE" | "TRANSFER" | "REFUND";
   installmentNumber: number | null;
   installmentTotal: number | null;
   category: { name: string } | null;
@@ -410,6 +410,7 @@ function toEntry(transaction: {
     amountCents: transaction.amountCents,
     categoryName: transaction.category?.name ?? null,
     isTransfer: transaction.type === "TRANSFER",
+    isRefund: transaction.type === "REFUND",
     installmentNumber: transaction.installmentNumber,
     installmentTotal: transaction.installmentTotal,
   };

@@ -17,7 +17,7 @@ export type TransactionSort = (typeof TRANSACTION_SORTS)[number];
 export const SORT_DIRECTIONS = ["asc", "desc"] as const;
 export type SortDirection = (typeof SORT_DIRECTIONS)[number];
 
-export const TRANSACTION_TYPE_VALUES = ["INCOME", "EXPENSE", "TRANSFER"] as const;
+export const TRANSACTION_TYPE_VALUES = ["INCOME", "EXPENSE", "TRANSFER", "REFUND"] as const;
 
 export const FILTER_PARAMS = {
   account: "conta",
@@ -154,6 +154,9 @@ export function summarizeEntries(
       if (entry.amountCents > 0) summary.transferCents += entry.amountCents;
       continue;
     }
+    // Estorno é devolução de compra no cartão, não receita: fica fora deste resumo do
+    // mesmo jeito que transferência fica — só a fatura do cartão sente o valor dele.
+    if (entry.type === "REFUND") continue;
 
     summary.netCents += entry.amountCents;
     if (entry.amountCents >= 0) summary.incomeCents += entry.amountCents;

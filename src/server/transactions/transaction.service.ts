@@ -1,11 +1,8 @@
-import type { AccountClass, AccountType, Prisma, TransactionType } from "@prisma/client";
+import type { Prisma, TransactionType } from "@prisma/client";
 import { fromISODate, toISODate } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
-import {
-  BUCKET_RULE_MESSAGES,
-  validateBucketEntry,
-  validateBucketTransfer,
-} from "@/server/accounts/account.buckets";
+import { BUCKET_RULE_MESSAGES, validateBucketTransfer } from "@/server/accounts/account.buckets";
+import { assertOperationAllowed } from "@/server/accounts/account.operations";
 import type { ResolvedPeriod } from "@/lib/period";
 import { resolveCategoryForDescription } from "@/server/categories/category.service";
 import { requireUserId } from "@/server/current-user";
@@ -31,7 +28,6 @@ export type TransactionErrorCode =
   | "ACCOUNT_NOT_FOUND"
   | "BROKEN_TRANSFER"
   | "NOT_A_TRANSFER"
-  | "CREDIT_CARD_AS_SOURCE"
   | "CREDIT_CARD_TRANSFER_FORBIDDEN"
   | "CLOSED_INVOICE_IMMUTABLE"
   | "INVOICE_NOT_FOUND"
@@ -93,8 +89,10 @@ export async function listTransactions(
       take: PAGE_SIZE,
       select: ROW_SELECT,
     }),
-    sumOf({ type: { not: "TRANSFER" }, amountCents: { gte: 0 } }),
-    sumOf({ type: { not: "TRANSFER" }, amountCents: { lt: 0 } }),
+    // Estorno fica fora dos dois somatórios: é devolução de compra no cartão, não receita,
+    // mesmo entrando positivo — a mesma razão que já tira transferência daqui.
+    sumOf({ type: { notIn: ["TRANSFER", "REFUND"] }, amountCents: { gte: 0 } }),
+    sumOf({ type: { notIn: ["TRANSFER", "REFUND"] }, amountCents: { lt: 0 } }),
     sumOf({ type: "TRANSFER", amountCents: { gt: 0 } }),
   ]);
 
@@ -136,9 +134,10 @@ export async function createTransaction(
   const userId = await requireUserId();
   return prisma.$transaction(async (tx) => {
     const account = await findAccount(tx, userId, input.accountId);
-    assertBucketEntryAllowed(account, input.type, signedAmount(input.type, input.amountCents));
+    assertOperationAllowed(account, input.type, signedAmount(input.type, input.amountCents));
     const date = fromISODate(input.date);
-    const installmentCount = input.installments ?? 1;
+    // Estorno não parcela: é a devolução de um valor já lançado, não uma compra nova.
+    const installmentCount = input.type === "REFUND" ? 1 : (input.installments ?? 1);
 
     // Regra de categorização entra aqui, e só quando o usuário não escolheu categoria.
     // O import de extrato vai passar pelo mesmo ponto.
@@ -246,7 +245,7 @@ export async function updateTransaction(
     for (const row of rows) assertInvoiceOpenForEdit(row.invoice?.closingDate, now);
 
     const account = await findAccount(tx, userId, input.accountId);
-    assertBucketEntryAllowed(account, input.type, signedAmount(input.type, input.amountCents));
+    assertOperationAllowed(account, input.type, signedAmount(input.type, input.amountCents));
     const firstDate = fromISODate(input.date);
     let schedule =
       account.creditCardDetails === null
@@ -513,6 +512,21 @@ export async function payInvoice(
       );
     }
 
+    // A perna que cai no cartão é a única transferência que ele aceita — e só porque o
+    // contexto diz explicitamente que é esta função quem está criando, não um lançamento
+    // avulso do usuário.
+    assertOperationAllowed(
+      {
+        id: invoice.creditCardDetails.account.id,
+        type: "CREDIT_CARD",
+        class: "LIABILITY",
+        parentAccountId: null,
+      },
+      "TRANSFER",
+      amountCents,
+      "PAY_INVOICE",
+    );
+
     const outstandingCents = Math.max(
       0,
       -invoice.transactions.reduce((total, entry) => total + entry.amountCents, 0),
@@ -571,6 +585,77 @@ export async function payInvoice(
       },
     });
     return transferGroupId;
+  });
+}
+
+export type RefundResult = {
+  id: string;
+  /** Aviso não bloqueante: presente quando a compra vinculada ainda tem parcelas futuras. */
+  installmentNotice: string | null;
+};
+
+/**
+ * Estorno: entrada de dinheiro dentro do cartão, nunca receita. `type: "REFUND"` — e não
+ * `INCOME` — é o que garante que este lançamento nunca aparece como receita em relatório
+ * nenhum, mesmo sendo um valor positivo que reduz a fatura e libera limite. A alocação de
+ * fatura usa a mesma regra de fechamento de uma compra normal.
+ */
+export async function registerRefund(
+  accountId: string,
+  amountCents: number,
+  date: Date,
+  description: string,
+  originalTransactionId?: string | null,
+): Promise<RefundResult> {
+  const userId = await requireUserId();
+  if (!Number.isInteger(amountCents) || amountCents <= 0) {
+    throw new TransactionServiceError("INVOICE_NOT_PAYABLE", "Informe um valor de estorno válido.");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const account = await findAccount(tx, userId, accountId);
+    assertOperationAllowed(account, "REFUND", amountCents);
+    const details = requireCardDetails(account.creditCardDetails);
+
+    // O vínculo é só para rastreabilidade: não reabre nem altera as parcelas restantes de
+    // uma compra parcelada, que continuam existindo e precisam da edição de parcelamento.
+    let installmentNotice: string | null = null;
+    if (originalTransactionId) {
+      const original = await tx.transaction.findFirst({
+        where: { id: originalTransactionId, userId, accountId },
+        select: { installmentTotal: true },
+      });
+      if (!original) {
+        throw new TransactionServiceError(
+          "NOT_FOUND",
+          "Compra original não encontrada nesta conta.",
+        );
+      }
+      if (original.installmentTotal && original.installmentTotal > 1) {
+        installmentNotice =
+          "O vínculo com a compra original é só informativo: as parcelas restantes continuam existindo e precisam ser tratadas pela edição de parcelamento.";
+      }
+    }
+
+    const schedule = invoiceScheduleForPurchase(date, details.closingDay, details.dueDay);
+    const invoice = await ensureOpenInvoice(tx, details, schedule, new Date());
+
+    const created = await tx.transaction.create({
+      data: {
+        user: { connect: { id: userId } },
+        account: { connect: { id: account.id } },
+        invoice: { connect: { id: invoice.id } },
+        date,
+        description,
+        amountCents,
+        type: "REFUND",
+        provider: "manual",
+        refundOfId: originalTransactionId ?? null,
+      },
+      select: { id: true },
+    });
+
+    return { id: created.id, installmentNotice };
   });
 }
 
@@ -637,34 +722,15 @@ async function validateCommonTransferAccounts(
     findAccount(tx, userId, fromAccountId),
     findAccount(tx, userId, toAccountId),
   ]);
-  if (source.class === "LIABILITY") {
-    throw new TransactionServiceError(
-      "CREDIT_CARD_AS_SOURCE",
-      "Cartão de crédito não pode ser origem de transferência.",
-    );
-  }
-  if (destination.class === "LIABILITY") {
-    throw new TransactionServiceError(
-      "CREDIT_CARD_TRANSFER_FORBIDDEN",
-      "Cartão de crédito não participa da transferência comum. Use Pagar fatura.",
-    );
-  }
+  // Transferência avulsa não tem exceção: quem move dinheiro para dentro ou para fora de
+  // um cartão por esse caminho é sempre rejeitado. A única perna de cartão sancionada é a
+  // que `payInvoice` cria, com o contexto `PAY_INVOICE` — nunca esta função.
+  assertOperationAllowed(source, "TRANSFER", -1);
+  assertOperationAllowed(destination, "TRANSFER", 1);
 
   // Caixinha só conversa com a própria conta mãe — nunca com outra conta, outra caixinha
   // ou cartão. As regras vivem em `account.buckets.ts` e são usadas também na criação.
   const violation = validateBucketTransfer(source, destination);
-  if (violation) {
-    throw new TransactionServiceError("BUCKET_RULE", BUCKET_RULE_MESSAGES[violation]);
-  }
-}
-
-/** Bloqueia lançamento avulso dentro de caixinha: lá só entram aporte, resgate e rendimento. */
-function assertBucketEntryAllowed(
-  account: { id: string; type: AccountType; class: AccountClass; parentAccountId: string | null },
-  type: TransactionType,
-  amountCents: number,
-): void {
-  const violation = validateBucketEntry(account, type, amountCents);
   if (violation) {
     throw new TransactionServiceError("BUCKET_RULE", BUCKET_RULE_MESSAGES[violation]);
   }
@@ -858,7 +924,8 @@ function toRow(row: RawRow): TransactionRow {
   };
 }
 
-function signedAmount(type: "INCOME" | "EXPENSE", magnitudeCents: number): number {
+/** Só `EXPENSE` sai negativo: receita, transferência e estorno entram positivos. */
+function signedAmount(type: TransactionType, magnitudeCents: number): number {
   return type === "EXPENSE" ? -magnitudeCents : magnitudeCents;
 }
 
